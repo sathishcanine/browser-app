@@ -235,6 +235,15 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         binding.homeImageView.isVisible =
             uiConfiguration.tabConfiguration == TabConfiguration.DESKTOP || isIncognito()
         binding.homeImageView.setImageResource(homeIcon())
+        binding.toolbarHome.setImageResource(
+            if (isIncognito() && uiConfiguration.tabConfiguration != TabConfiguration.DESKTOP) {
+                R.drawable.ic_action_home
+            } else {
+                homeIcon()
+            }
+        )
+        binding.toolbarHome.isVisible =
+            uiConfiguration.tabConfiguration != TabConfiguration.DESKTOP
         binding.tabCountView.isVisible =
             uiConfiguration.tabConfiguration != TabConfiguration.DESKTOP && !isIncognito()
 
@@ -339,6 +348,7 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         binding.findQuit.setOnClickListener { presenter.onFindDismiss() }
 
         binding.homeButton.setOnClickListener { presenter.onTabCountViewClick() }
+        binding.toolbarHome.setOnClickListener { presenter.onHomeClick() }
         binding.actionBack.setOnClickListener { presenter.onBackClick() }
         binding.actionForward.setOnClickListener { presenter.onForwardClick() }
         binding.actionHome.setOnClickListener { presenter.onHomeClick() }

@@ -79,7 +79,7 @@
                                 android:layout_height="match_parent"
                                 android:layout_marginLeft="8dp"
                                 android:layout_marginTop="6dp"
-                                android:layout_marginRight="2dp"
+                                android:layout_marginRight="4dp"
                                 android:layout_marginBottom="6dp"
                                 android:layout_weight="1"
                                 android:background="?attr/searchBackground"
@@ -92,10 +92,10 @@
 
                                 <ImageView
                                     android:id="@+id/search_ssl_status"
-                                    android:layout_width="@dimen/material_grid_touch_small"
+                                    android:layout_width="@dimen/toolbar_secondary_icon"
                                     android:layout_height="match_parent"
                                     android:background="?selectableItemBackgroundBorderless"
-                                    android:padding="6dp"
+                                    android:padding="4dp"
                                     android:visibility="gone"
                                     app:layout_constraintStart_toStartOf="parent"
                                     app:layout_constraintTop_toTopOf="parent" />
@@ -126,21 +126,33 @@
 
                                 <ImageView
                                     android:id="@+id/search_refresh"
-                                    android:layout_width="@dimen/material_grid_touch_small"
+                                    android:layout_width="@dimen/toolbar_secondary_icon"
                                     android:layout_height="match_parent"
                                     android:background="?selectableItemBackgroundBorderless"
                                     android:clickable="true"
                                     android:focusable="true"
-                                    android:padding="6dp"
+                                    android:padding="4dp"
                                     app:layout_constraintEnd_toEndOf="parent"
                                     app:layout_constraintTop_toTopOf="parent"
                                     app:srcCompat="@drawable/ic_action_refresh" />
 
                             </androidx.constraintlayout.widget.ConstraintLayout>
 
+                            <ImageView
+                                android:id="@+id/toolbar_home"
+                                android:layout_width="@dimen/toolbar_home_button_width"
+                                android:layout_height="match_parent"
+                                android:background="?attr/actionBarItemBackground"
+                                android:clickable="true"
+                                android:contentDescription="@string/home"
+                                android:focusable="true"
+                                android:paddingHorizontal="2dp"
+                                android:scaleType="centerInside"
+                                app:srcCompat="@drawable/ic_action_home" />
+
                             <FrameLayout
                                 android:id="@+id/home_button"
-                                android:layout_width="?attr/actionBarSize"
+                                android:layout_width="@dimen/toolbar_tab_switcher_width"
                                 android:layout_height="match_parent"
                                 android:background="?attr/actionBarItemBackground"
                                 android:clickable="true"
@@ -158,13 +170,13 @@
 
                                 <acr.browser.lightning.icon.TabCountView
                                     android:id="@+id/tab_count_view"
-                                    android:layout_width="@dimen/material_grid_small_icon"
-                                    android:layout_height="@dimen/material_grid_small_icon"
+                                    android:layout_width="@dimen/toolbar_tab_count_icon"
+                                    android:layout_height="@dimen/toolbar_tab_count_icon"
                                     android:layout_gravity="center"
-                                    app:tabIconBorderRadius="6dp"
+                                    app:tabIconBorderRadius="5dp"
                                     app:tabIconBorderWidth="2dp"
                                     app:tabIconColor="?attr/iconColor"
-                                    app:tabIconTextSize="14dp" />
+                                    app:tabIconTextSize="12dp" />
                             </FrameLayout>
                         </LinearLayout>
                     </androidx.appcompat.widget.Toolbar>

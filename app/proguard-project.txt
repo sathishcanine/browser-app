@@ -67,3 +67,7 @@
 
 -dontwarn androidx.window.extensions.**
 -dontwarn androidx.window.sidecar.**
+
+# Firebase Crashlytics (readable stack traces in release)
+-keepattributes SourceFile,LineNumberTable
+-keep public class * extends java.lang.Exception

@@ -1,6 +1,8 @@
 plugins {
     id("com.android.application")
     id("com.github.ben-manes.versions")
+    id("com.google.gms.google-services")
+    id("com.google.firebase.crashlytics")
     id("com.google.devtools.ksp") version "2.3.7"
     id("com.anthonycr.plugins.mezzanine") version "2.3.0"
     id("com.autonomousapps.dependency-analysis") version "3.10.0"
@@ -117,6 +119,7 @@ dependencies {
     implementation("androidx.palette:palette:1.0.0")
     implementation("androidx.preference:preference:1.2.1")
     implementation("androidx.recyclerview:recyclerview:1.4.0")
+    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
     implementation("androidx.webkit:webkit:1.15.0")
     implementation("com.anthonycr.mezzanine:core:$mezzanineVersion")
     implementation("com.google.android.material:material:1.13.0")
@@ -136,6 +139,10 @@ dependencies {
     implementation("org.jsoup:jsoup:1.22.2")
     implementation("org.jspecify:jspecify:1.0.0")
     implementation("org.reactivestreams:reactive-streams:1.0.4")
+
+    implementation(platform("com.google.firebase:firebase-bom:33.9.0"))
+    implementation("com.google.firebase:firebase-analytics-ktx")
+    implementation("com.google.firebase:firebase-crashlytics-ktx")
 
     debugImplementation("com.squareup.leakcanary:leakcanary-android:2.14")
 

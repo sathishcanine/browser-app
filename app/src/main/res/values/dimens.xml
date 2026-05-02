@@ -20,7 +20,12 @@
     <dimen name="navigation_drawer_minimum_space">56dp</dimen>
 
     <dimen name="desktop_tab_width">175dp</dimen>
-    <dimen name="desktop_tab_height">30dp</dimen>
+    <dimen name="desktop_tab_height">26dp</dimen>
+
+    <dimen name="toolbar_home_button_width">36dp</dimen>
+    <dimen name="toolbar_tab_switcher_width">40dp</dimen>
+    <dimen name="toolbar_secondary_icon">32dp</dimen>
+    <dimen name="toolbar_tab_count_icon">20dp</dimen>
 
     <dimen name="progress_bar_height">2dp</dimen>
 </resources>

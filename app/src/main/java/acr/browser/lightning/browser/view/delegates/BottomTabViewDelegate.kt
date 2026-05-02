@@ -39,6 +39,7 @@ class BottomTabViewDelegate(binding: BrowserActivityBottomBinding) : ViewDelegat
     override val findNext: ImageButton = binding.findNext
     override val findQuit: ImageButton = binding.findQuit
     override val homeButton: FrameLayout = binding.homeButton
+    override val toolbarHome: ImageView = binding.toolbarHome
     override val actionBack: ImageView = binding.actionBack
     override val actionForward: ImageView = binding.actionForward
     override val actionHome: ImageView = binding.actionHome

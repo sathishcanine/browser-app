@@ -41,6 +41,7 @@ class TabsRepository @Inject constructor(
         isInitialized.filter { it }.firstOrError()
 
     override fun deleteTab(id: Int): Completable = Completable.fromAction {
+        tabPager.removeTabEntry(id)
         if (selectedTab?.id == id) {
             tabPager.clearTab()
         }
@@ -56,8 +57,10 @@ class TabsRepository @Inject constructor(
         afterInitialization().flatMapCompletable {
             Completable.fromAction {
                 tabPager.clearTab()
-
-                tabsList.forEach(TabModel::destroy)
+                tabsList.forEach { tab ->
+                    tabPager.removeTabEntry(tab.id)
+                    tab.destroy()
+                }
                 tabsList = emptyList()
             }
         }.doOnComplete {

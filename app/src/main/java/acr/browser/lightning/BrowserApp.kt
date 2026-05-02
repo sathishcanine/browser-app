@@ -16,6 +16,9 @@ import android.app.Application
 import android.os.Build
 import android.os.StrictMode
 import android.webkit.WebView
+import com.google.firebase.FirebaseApp
+import com.google.firebase.analytics.FirebaseAnalytics
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import io.reactivex.rxjava3.core.Scheduler
 import io.reactivex.rxjava3.core.Single
 import io.reactivex.rxjava3.plugins.RxJavaPlugins
@@ -53,6 +56,11 @@ class BrowserApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+
+        FirebaseApp.initializeApp(this)
+        FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(!BuildConfig.DEBUG)
+        FirebaseAnalytics.getInstance(this).setAnalyticsCollectionEnabled(true)
+
         if (BuildConfig.DEBUG) {
             StrictMode.setThreadPolicy(
                 StrictMode.ThreadPolicy.Builder()
@@ -94,10 +102,14 @@ class BrowserApp : Application() {
         }
 
         RxJavaPlugins.setErrorHandler { throwable: Throwable? ->
-            if (BuildConfig.DEBUG && throwable != null) {
+            if (throwable == null) {
+                return@setErrorHandler
+            }
+            if (BuildConfig.DEBUG) {
                 FileUtils.writeCrashToStorage(throwable)
                 throw throwable
             }
+            FirebaseCrashlytics.getInstance().recordException(throwable)
         }
 
         applicationComponent = DaggerAppComponent.builder()

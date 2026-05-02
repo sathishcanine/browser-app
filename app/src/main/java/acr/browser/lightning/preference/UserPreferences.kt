@@ -65,6 +65,11 @@ class UserPreferences @Inject constructor(
     )
 
     /**
+     * True if the user can pull down on a page to reload it, false otherwise.
+     */
+    var pullToRefreshEnabled by preferences.booleanPreference(PULL_TO_REFRESH, true)
+
+    /**
      * True if the browser should hide the navigation bar when scrolling, false if it should be
      * immobile.
      */
@@ -307,6 +312,7 @@ private const val BLOCK_IMAGES = "blockimages"
 private const val CLEAR_CACHE_EXIT = "cache"
 private const val COOKIES = "cookies"
 private const val DOWNLOAD_DIRECTORY = "downloadLocation"
+private const val PULL_TO_REFRESH = "pullToRefresh"
 private const val FULL_SCREEN = "fullscreen"
 private const val HIDE_STATUS_BAR = "hidestatus"
 private const val HOMEPAGE = "home"

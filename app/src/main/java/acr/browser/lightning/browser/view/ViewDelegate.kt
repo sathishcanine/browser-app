@@ -60,6 +60,8 @@ interface ViewDelegate {
 
     val homeButton: FrameLayout
 
+    val toolbarHome: ImageView
+
     val actionBack: ImageView
 
     val actionForward: ImageView

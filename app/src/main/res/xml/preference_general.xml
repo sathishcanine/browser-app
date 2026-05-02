@@ -3,6 +3,10 @@
 
     <PreferenceCategory android:title="@string/settings_general">
         <SwitchPreference
+            android:defaultValue="true"
+            android:key="cb_pull_refresh"
+            android:title="@string/pull_to_refresh" />
+        <SwitchPreference
             android:defaultValue="false"
             android:key="cb_images"
             android:title="@string/block"/>

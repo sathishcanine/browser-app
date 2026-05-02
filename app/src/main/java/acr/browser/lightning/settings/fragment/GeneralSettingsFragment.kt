@@ -68,6 +68,12 @@ class GeneralSettingsFragment : AbstractSettingsFragment() {
         )
 
         togglePreference(
+            preference = SETTINGS_PULL_REFRESH,
+            isChecked = userPreferences.pullToRefreshEnabled,
+            onCheckChange = { userPreferences.pullToRefreshEnabled = it }
+        )
+
+        togglePreference(
             preference = SETTINGS_IMAGES,
             isChecked = userPreferences.blockImagesEnabled,
             onCheckChange = { userPreferences.blockImagesEnabled = it }
@@ -372,6 +378,7 @@ class GeneralSettingsFragment : AbstractSettingsFragment() {
 
     companion object {
         private const val SETTINGS_PROXY = "proxy"
+        private const val SETTINGS_PULL_REFRESH = "cb_pull_refresh"
         private const val SETTINGS_IMAGES = "cb_images"
         private const val SETTINGS_SAVEDATA = "savedata"
         private const val SETTINGS_JAVASCRIPT = "cb_javascript"
