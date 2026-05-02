@@ -77,7 +77,7 @@
                                 android:visibility="gone"
                                 app:srcCompat="@drawable/ic_action_home" />
 
-                            <acr.browser.lightning.icon.TabCountView
+                            <com.browser.minnal.icon.TabCountView
                                 android:id="@+id/tab_count_view"
                                 android:layout_width="@dimen/toolbar_tab_count_icon"
                                 android:layout_height="@dimen/toolbar_tab_count_icon"
@@ -127,7 +127,7 @@
                                 app:layout_constraintStart_toStartOf="parent"
                                 app:layout_constraintTop_toTopOf="parent" />
 
-                            <acr.browser.lightning.search.SearchView
+                            <com.browser.minnal.search.SearchView
                                 android:id="@+id/search"
                                 android:layout_width="0dp"
                                 android:layout_height="match_parent"

@@ -70,15 +70,15 @@ android {
         create("lightningPlus") {
             dimension = "capabilities"
             buildConfigField("boolean", "FULL_VERSION", "Boolean.parseBoolean(\"true\")")
-            applicationId = "acr.browser.lightning"
+            applicationId = "com.browser.minnal"
             versionCode = 101
         }
 
         if (!isCi) {
             create("lightningLite") {
                 dimension = "capabilities"
-                buildConfigField("boolean", "FULL_VERSION", "Boolean.parseBoolean(\"false\")")
-                applicationId = "acr.browser.barebones"
+                buildConfigField("boolean", "FULL_VERSION", "Boolean.parseBoolean(\"true\")")
+                applicationId = "com.browser.minnal"
                 versionCode = 102
             }
         }
@@ -91,7 +91,7 @@ android {
     lint {
         abortOnError = true
     }
-    namespace = "acr.browser.lightning"
+    namespace = "com.browser.minnal"
 }
 
 dependencies {

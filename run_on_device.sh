@@ -14,5 +14,5 @@ echo "Using ANDROID_SERIAL=${ANDROID_SERIAL}"
 echo "Installing Lightning Plus (debug)..."
 ./gradlew :app:installLightningPlusDebug
 echo "Launching app..."
-adb shell am start -n acr.browser.lightning/.DefaultBrowserActivity
+adb shell am start -n com.browser.minnal/.DefaultBrowserActivity
 echo "Done."
