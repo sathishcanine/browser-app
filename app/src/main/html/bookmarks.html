@@ -1,36 +1,46 @@
 <!DOCTYPE html>
-<html xmlns=http://www.w3.org/1999/xhtml>
+<html xmlns="http://www.w3.org/1999/xhtml">
 
 <head>
-    <meta content=en-us http-equiv=Content-Language>
-    <meta content='text/html; charset=utf-8' http-equiv=Content-Type>
-    <meta name=viewport
-          content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'>
-    <title>
-        ${TITLE}
-    </title>
+    <meta content="en-us" http-equiv="Content-Language"/>
+    <meta content="text/html; charset=utf-8" http-equiv="Content-Type"/>
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>${TITLE}</title>
 </head>
 <style>
     :root {
         --body-bg: {COLOR}
         --box-bg: {COLOR}
         --box-txt: {COLOR}
+        --search-bar-bg: {COLOR}
     }
 
     body {
         background: var(--body-bg);
         padding-top: 5px;
         max-width: 100%;
-        min-height: 100%
+        min-height: 100%;
+        margin: 0;
+    }
+
+    /* Google-style search block (above bookmarks) */
+    .google-search-wrap {
+        max-width: 584px;
+        margin: 8px auto 20px;
+        padding: 0 16px;
+        text-align: center;
+        font-family: Arial, Helvetica, sans-serif;
     }
 
     #content {
         width: 100%;
         max-width: 800px;
         margin: 0 auto;
-        text-align: center
+        padding-top: 0;
+        text-align: center;
     }
-    
+
     .box {
         vertical-align: middle;
         text-align: center;
@@ -41,26 +51,25 @@
         margin: 6px;
         padding: 4px;
         background-color: var(--box-bg);
-        font-family: Arial;
+        font-family: Arial, Helvetica, sans-serif;
         color: var(--box-txt);
-        font-size: 12px;
         -moz-border-radius: 8px;
         -webkit-border-radius: 8px;
-        border-radius: 8px
+        border-radius: 8px;
     }
-    
+
     .box-content {
         height: 25px;
         width: 100%;
         vertical-align: middle;
         text-align: center;
-        display: table-cell
+        display: table-cell;
     }
-    
+
     p.ellipses {
         width: 130px;
         font-size: small;
-        font-family: Arial, Helvetica, 'sans-serif';
+        font-family: Arial, Helvetica, sans-serif;
         white-space: nowrap;
         overflow: hidden;
         text-align: left;
@@ -68,46 +77,177 @@
         margin: auto;
         text-overflow: ellipsis;
         -o-text-overflow: ellipsis;
-        -ms-text-overflow: ellipsis
+        -ms-text-overflow: ellipsis;
     }
-    
+
     .box a {
         width: 100%;
         height: 100%;
         position: absolute;
         left: 0;
-        top: 0
+        top: 0;
     }
-    
+
     img {
         vertical-align: middle;
         margin-right: 10px;
         width: 20px;
         height: 20px;
     }
-    
+
     .margin {
-        margin: 10px
+        margin: 10px;
     }
 
+    .google-logo {
+        font-size: 48px;
+        font-weight: 400;
+        letter-spacing: -2px;
+        line-height: 1.1;
+        margin-bottom: 20px;
+        user-select: none;
+    }
 
+    .google-logo .c1 { color: #4285F4; }
+    .google-logo .c2 { color: #EA4335; }
+    .google-logo .c3 { color: #FBBC05; }
+    .google-logo .c4 { color: #4285F4; }
+    .google-logo .c5 { color: #34A853; }
+    .google-logo .c6 { color: #EA4335; }
+
+    .g-search-form {
+        margin: 0;
+    }
+
+    .g-search-bar {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        width: 100%;
+        min-height: 44px;
+        padding: 6px 10px 6px 14px;
+        box-sizing: border-box;
+        background-color: var(--search-bar-bg);
+        border-radius: 9999px;
+        border: 1px solid rgba(0, 0, 0, 0.06);
+        box-shadow: 0 1px 6px rgba(32, 33, 36, 0.08);
+    }
+
+    .g-search-bar img.g-inline-logo {
+        width: 20px;
+        height: 20px;
+        margin: 0 10px 0 0;
+        flex-shrink: 0;
+    }
+
+    .g-search-bar input {
+        flex: 1 1 auto;
+        min-width: 0;
+        border: none;
+        outline: none;
+        background: transparent;
+        font-size: 16px;
+        color: var(--box-txt);
+        font-family: Arial, Helvetica, sans-serif;
+    }
+
+    .g-search-bar input::placeholder {
+        color: var(--box-txt);
+        opacity: 0.55;
+    }
+
+    .g-search-actions {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        flex-shrink: 0;
+        gap: 4px;
+        padding-left: 4px;
+    }
+
+    .g-search-actions button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        padding: 0;
+        border: none;
+        background: transparent;
+        border-radius: 50%;
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    .g-search-actions button:active {
+        background: rgba(0, 0, 0, 0.06);
+    }
+
+    .g-search-actions svg {
+        display: block;
+    }
 </style>
 
 <body>
-<div id=content>
+<div class="google-search-wrap">
+    <div class="google-logo" aria-hidden="true">
+        <span class="c1">G</span><span class="c2">o</span><span class="c3">o</span><span class="c4">g</span><span class="c5">l</span><span class="c6">e</span>
+    </div>
+    <form class="g-search-form" onsubmit="return lightningBookmarkSearch(event)" autocomplete="off">
+        <div class="g-search-bar">
+            <img class="g-inline-logo" id="bookmark_search_engine_icon" src="file:///android_asset/google.png" alt=""/>
+            <input type="text" id="bookmark_search_input" name="q"
+                   placeholder="Search Google or type URL"
+                   enterkeyhint="search"/>
+            <div class="g-search-actions">
+                <button type="submit" title="Search" aria-label="Search">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+                        <path fill="#5f6368"
+                              d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
 
-    <div id=repeated class=box>
-        <a href='${URL}'></a>
-        <div class=margin>
-            <div class=box-content>
-                <p class=ellipses id=title>
-                    <img src='${IMAGE}'/>
+<div id="content">
+
+    <div id="repeated" class="box">
+        <a href="${URL}"></a>
+        <div class="margin">
+            <div class="box-content">
+                <p class="ellipses" id="title">
+                    <img src="${IMAGE}" alt=""/>
                 </p>
             </div>
         </div>
     </div>
 
 </div>
+
+<script type="text/javascript">
+        function lightningBookmarkSearch(ev) {
+            var el = document.getElementById("bookmark_search_input");
+            var q = el && el.value ? el.value.trim() : "";
+            if (!q) {
+                return false;
+            }
+            var urlPattern = /^(https?:)?\/\//i;
+            var domainLike = /^[\w.-]+\.[a-z]{2,}([\/?#][^\s]*)?$/i;
+            if (urlPattern.test(q) || domainLike.test(q)) {
+                var url = q;
+                if (!/^https?:\/\//i.test(url)) {
+                    url = "https://" + url;
+                }
+                window.location.href = url;
+            } else {
+                window.location.href = "${BASE_URL}" + encodeURIComponent(q);
+            }
+            el.value = "";
+            return false;
+        }
+</script>
 </body>
 
 </html>

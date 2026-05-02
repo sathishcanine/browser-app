@@ -21,6 +21,7 @@ import acr.browser.lightning.html.jsoup.removeElement
 import acr.browser.lightning.html.jsoup.style
 import acr.browser.lightning.html.jsoup.tag
 import acr.browser.lightning.html.jsoup.title
+import acr.browser.lightning.search.SearchEngineProvider
 import acr.browser.lightning.utils.ThemeUtils
 import android.app.Application
 import android.graphics.Bitmap
@@ -42,7 +43,8 @@ class BookmarkPageFactory @Inject constructor(
     @DatabaseScheduler private val databaseScheduler: Scheduler,
     @DiskScheduler private val diskScheduler: Scheduler,
     private val bookmarkPageReader: BookmarkPageReader,
-    private val themeProvider: ThemeProvider
+    private val themeProvider: ThemeProvider,
+    private val searchEngineProvider: SearchEngineProvider
 ) : HtmlPageFactory {
 
     private val title = application.getString(R.string.action_bookmarks)
@@ -116,15 +118,19 @@ class BookmarkPageFactory @Inject constructor(
     }
 
     private fun construct(list: List<BookmarkViewModel>): String {
+        val searchEngine = searchEngineProvider.provideSearchEngine()
+        val queryUrlForScript = searchEngine.queryUrl.replace("&", "\\u0026")
         return parse(bookmarkPageReader.provideHtml()) andBuild {
             title { title }
             style { content ->
                 content.replace("--body-bg: {COLOR}", "--body-bg: #$backgroundColor;")
                     .replace("--box-bg: {COLOR}", "--box-bg: #$cardColor;")
                     .replace("--box-txt: {COLOR}", "--box-txt: #$textColor;")
+                    .replace("--search-bar-bg: {COLOR}", "--search-bar-bg: #$cardColor;")
             }
             body {
                 val repeatableElement = findId("repeated").removeElement()
+                id("bookmark_search_engine_icon") { attr("src", searchEngine.iconUrl) }
                 id("content") {
                     list.forEach {
                         appendChild(repeatableElement.clone {
@@ -133,6 +139,11 @@ class BookmarkPageFactory @Inject constructor(
                             id("title") { appendText(it.title) }
                         })
                     }
+                }
+                tag("script") {
+                    html(
+                        html().replace("\${BASE_URL}", queryUrlForScript)
+                    )
                 }
             }
         }
