@@ -58,6 +58,15 @@ class BrowserApp : Application() {
     override fun onCreate() {
         super.onCreate()
 
+        // Must run before any code path that can create a WebView (e.g. Mobile Ads). Otherwise the
+        // :incognito process shares the default WebView data dir with the main process and crashes.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            if (getProcessName() == "$packageName:incognito") {
+                File(dataDir, "app_webview_incognito").deleteRecursively()
+                WebView.setDataDirectorySuffix("incognito")
+            }
+        }
+
         FirebaseApp.initializeApp(this)
         MobileAds.initialize(this) {}
         FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(!BuildConfig.DEBUG)
@@ -80,13 +89,6 @@ class BrowserApp : Application() {
 
         MainScope().launch {
             cleanup.cleanup()
-        }
-
-        if (Build.VERSION.SDK_INT >= 28) {
-            if (getProcessName() == "$packageName:incognito") {
-                File(dataDir, "app_webview_incognito").deleteRecursively()
-                WebView.setDataDirectorySuffix("incognito")
-            }
         }
 
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()

@@ -11,10 +11,12 @@ import com.browser.minnal.search.SearchEngineProvider
 import com.browser.minnal.search.Suggestions
 import com.browser.minnal.search.engine.BaseSearchEngine
 import com.browser.minnal.search.engine.CustomSearch
+import com.browser.minnal.utils.DefaultBrowserHelper
 import com.browser.minnal.utils.FileUtils
 import com.browser.minnal.utils.ThemeUtils
 import android.os.Bundle
 import android.os.Environment
+import androidx.preference.Preference
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.LayoutInflater
@@ -96,7 +98,28 @@ class GeneralSettingsFragment : AbstractSettingsFragment() {
             isChecked = userPreferences.colorModeEnabled,
             onCheckChange = { userPreferences.colorModeEnabled = it }
         )
+
+        clickableDynamicPreference(
+            preference = SETTINGS_DEFAULT_BROWSER,
+            summary = defaultBrowserSummary(),
+            onClick = { summaryUpdater ->
+                DefaultBrowserHelper.launchDefaultBrowserFlow(requireActivity())
+                summaryUpdater.updateSummary(defaultBrowserSummary())
+            }
+        )
     }
+
+    override fun onResume() {
+        super.onResume()
+        findPreference<Preference>(SETTINGS_DEFAULT_BROWSER)?.summary = defaultBrowserSummary()
+    }
+
+    private fun defaultBrowserSummary(): String =
+        if (DefaultBrowserHelper.isAppDefaultBrowser(requireContext())) {
+            getString(R.string.summary_default_browser_yes)
+        } else {
+            getString(R.string.summary_default_browser_no)
+        }
 
     private fun choiceToUserAgent(index: Int) = when (index) {
         1 -> resources.getString(R.string.agent_default)
@@ -388,5 +411,6 @@ class GeneralSettingsFragment : AbstractSettingsFragment() {
         private const val SETTINGS_HOME = "home"
         private const val SETTINGS_SEARCH_ENGINE = "search"
         private const val SETTINGS_SUGGESTIONS = "suggestions_choice"
+        private const val SETTINGS_DEFAULT_BROWSER = "default_browser"
     }
 }

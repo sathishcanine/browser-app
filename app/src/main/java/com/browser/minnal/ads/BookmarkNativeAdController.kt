@@ -15,13 +15,18 @@ import androidx.core.view.isVisible
 import androidx.fragment.app.FragmentActivity
 
 /**
- * Native advanced ad on the bookmarks (start) page: header with expand/collapse and close.
- * Starts expanded; close hides the strip until the user leaves the bookmark page and returns.
+ * Native advanced ad strip (expand/collapse/close). Used for the bookmarks start page and for
+ * an extra strip shown when the user returns to the app on a non-bookmark tab.
  */
 class BookmarkNativeAdController(
     private val activity: FragmentActivity,
     stripBinding: BookmarkNativeAdStripBinding,
 ) {
+
+    /**
+     * Invoked when the user taps the strip close control (after hiding the strip).
+     */
+    var onUserDismissedStrip: (() -> Unit)? = null
 
     private val stripRoot = stripBinding.root
     private val expandToggle = stripBinding.nativeAdExpandToggle
@@ -41,6 +46,7 @@ class BookmarkNativeAdController(
             updateExpandedUi()
         }
         closeButton.setOnClickListener {
+            onUserDismissedStrip?.invoke()
             dismissedForThisBookmarkVisit = true
             stripRoot.isVisible = false
             adContainer.isVisible = false

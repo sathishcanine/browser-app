@@ -1,3 +1,8 @@
+# Keep app/src/main/assets/ tracked (hosts list, images, privacy_policy.html, etc.).
+# Do not add Git ignore rules for that tree. In Android Studio, do not mark `assets` as Excluded
+# and do not add IDE-only ignores (Settings → Version Control → Ignored Files, or
+# Editor → File Types → Ignored files and folders) that match *.html or assets.
+
 /build
 *.apk
 manifest-merger-release-report.txt

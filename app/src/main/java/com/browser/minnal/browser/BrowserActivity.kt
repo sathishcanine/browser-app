@@ -40,6 +40,7 @@ import com.browser.minnal.databinding.BrowserActivityBottomBinding
 import com.browser.minnal.databinding.BrowserActivityDesktopBinding
 import com.browser.minnal.databinding.BrowserActivityDrawerBinding
 import com.browser.minnal.databinding.BrowserBottomTabsBinding
+import com.browser.minnal.databinding.BookmarkNativeAdStripBinding
 import com.browser.minnal.dialog.BrowserDialog
 import com.browser.minnal.dialog.DialogItem
 import com.browser.minnal.dialog.LightningDialogBuilder
@@ -50,6 +51,7 @@ import com.browser.minnal.extensions.takeIfInstance
 import com.browser.minnal.extensions.tint
 import com.browser.minnal.search.SuggestionsAdapter
 import com.browser.minnal.ssl.createSslDrawableForState
+import com.browser.minnal.utils.DefaultBrowserHelper
 import com.browser.minnal.utils.value
 import android.content.Intent
 import android.content.pm.ActivityInfo
@@ -61,6 +63,7 @@ import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import android.widget.AdapterView
@@ -101,13 +104,24 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
     private var customView: View? = null
 
     private var bookmarkNativeAdController: BookmarkNativeAdController? = null
+    private var appOpenNativeAdController: BookmarkNativeAdController? = null
+
+    private var shouldOfferAppOpenNativeAdOnNextForeground = true
+    private var pendingAppOpenNativeAd = false
+    private var lastBookmarkNativeAdStripVisible = false
 
     private var pendingScroll = -1
+
+    private var defaultBrowserPrompt: AlertDialog? = null
 
     @Suppress("ConvertLambdaToReference")
     private val launcher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { presenter.onFileChooserResult(it) }
+
+    private val defaultBrowserRoleLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { /* system UI completed; no follow-up required */ }
 
     @Inject
     internal lateinit var imageLoader: ImageLoader
@@ -162,6 +176,16 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState != null) {
+            shouldOfferAppOpenNativeAdOnNextForeground = savedInstanceState.getBoolean(
+                STATE_SHOULD_OFFER_APP_OPEN_NATIVE_AD,
+                false
+            )
+            pendingAppOpenNativeAd = savedInstanceState.getBoolean(
+                STATE_PENDING_APP_OPEN_NATIVE_AD,
+                false
+            )
+        }
         binding = when (userPreferences.tabConfiguration) {
             TabConfiguration.DESKTOP -> {
                 val actualBinding = BrowserActivityDesktopBinding.inflate(LayoutInflater.from(this))
@@ -315,11 +339,24 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         binding.bookmarkListView.adapter = bookmarksAdapter
         binding.bookmarkListView.layoutManager = LinearLayoutManager(this)
 
-        presenter.onViewAttached(BrowserStateAdapter(this))
-
         if (!isIncognito()) {
             bookmarkNativeAdController = BookmarkNativeAdController(this, binding.bookmarkNativeAdStrip)
+            val bookmarkStripRoot = binding.bookmarkNativeAdStrip.root
+            val parent = bookmarkStripRoot.parent as? ViewGroup
+            if (parent != null) {
+                val insertIndex = parent.indexOfChild(bookmarkStripRoot)
+                val appOpenStrip = BookmarkNativeAdStripBinding.inflate(layoutInflater, parent, false)
+                parent.addView(appOpenStrip.root, insertIndex)
+                appOpenNativeAdController = BookmarkNativeAdController(this, appOpenStrip).apply {
+                    onUserDismissedStrip = {
+                        pendingAppOpenNativeAd = false
+                        syncAppOpenNativeAd()
+                    }
+                }
+            }
         }
+
+        presenter.onViewAttached(BrowserStateAdapter(this))
 
         val suggestionsAdapter = SuggestionsAdapter(this, isIncognito = isIncognito()).apply {
             onSuggestionInsertClick = {
@@ -378,14 +415,49 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        if (isIncognito()) {
+            appOpenNativeAdController?.onPresenterShowBookmarkNativeAd(false)
+            return
+        }
+        if (shouldOfferAppOpenNativeAdOnNextForeground) {
+            shouldOfferAppOpenNativeAdOnNextForeground = false
+            pendingAppOpenNativeAd = true
+        }
+        binding.root.post { syncAppOpenNativeAd() }
+    }
+
+    override fun onStop() {
+        if (!isChangingConfigurations && !isIncognito()) {
+            shouldOfferAppOpenNativeAdOnNextForeground = true
+        }
+        super.onStop()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(STATE_SHOULD_OFFER_APP_OPEN_NATIVE_AD, shouldOfferAppOpenNativeAdOnNextForeground)
+        outState.putBoolean(STATE_PENDING_APP_OPEN_NATIVE_AD, pendingAppOpenNativeAd)
+    }
+
     override fun onNewIntent(intent: Intent) {
         intentExtractor.extractUrlFromIntent(intent)?.let(presenter::onNewAction)
         super.onNewIntent(intent)
     }
 
+    override fun onWindowVisibleToUserAfterResume() {
+        super.onWindowVisibleToUserAfterResume()
+        maybeShowDefaultBrowserPrompt()
+    }
+
     override fun onDestroy() {
+        defaultBrowserPrompt?.dismiss()
+        defaultBrowserPrompt = null
         bookmarkNativeAdController?.destroy()
         bookmarkNativeAdController = null
+        appOpenNativeAdController?.destroy()
+        appOpenNativeAdController = null
         presenter.onViewDetached()
         super.onDestroy()
     }
@@ -470,6 +542,12 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         }
         viewState.showBookmarkNativeAdStrip?.let { show ->
             bookmarkNativeAdController?.onPresenterShowBookmarkNativeAd(show)
+            lastBookmarkNativeAdStripVisible = show
+            // One native placement on the start page: bookmark strip OR app-return strip, not both.
+            if (show) {
+                pendingAppOpenNativeAd = false
+            }
+            syncAppOpenNativeAd()
         }
     }
 
@@ -876,5 +954,63 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         } else {
             View.VISIBLE
         }
+    }
+
+    private fun syncAppOpenNativeAd() {
+        if (isIncognito()) {
+            appOpenNativeAdController?.onPresenterShowBookmarkNativeAd(false)
+            return
+        }
+        if (lastBookmarkNativeAdStripVisible) {
+            appOpenNativeAdController?.onPresenterShowBookmarkNativeAd(false)
+            return
+        }
+        appOpenNativeAdController?.onPresenterShowBookmarkNativeAd(pendingAppOpenNativeAd)
+    }
+
+    private fun maybeShowDefaultBrowserPrompt() {
+        if (isIncognito()) return
+        if (userPreferences.suppressDefaultBrowserPrompt) return
+        if (DefaultBrowserHelper.isAppDefaultBrowser(this)) return
+
+        val now = System.currentTimeMillis()
+        if (now < userPreferences.defaultBrowserPromptSnoozedUntilMs) return
+        val last = userPreferences.lastDefaultBrowserPromptEpochMs
+        if (last != 0L && now - last < DEFAULT_BROWSER_PROMPT_MIN_INTERVAL_MS) return
+        if (defaultBrowserPrompt?.isShowing == true) return
+
+        val snoozeMs = DEFAULT_BROWSER_SNOOZE_MS
+        defaultBrowserPrompt = AlertDialog.Builder(this)
+            .setTitle(R.string.title_set_default_browser)
+            .setMessage(R.string.message_set_default_browser)
+            .setPositiveButton(R.string.action_set_as_default) { _, _ ->
+                val intent = DefaultBrowserHelper.createDefaultBrowserSettingsIntent(this)
+                try {
+                    defaultBrowserRoleLauncher.launch(intent)
+                } catch (_: Exception) {
+                    DefaultBrowserHelper.launchDefaultBrowserFlow(this)
+                }
+            }
+            .setNegativeButton(R.string.action_not_now) { _, _ ->
+                userPreferences.defaultBrowserPromptSnoozedUntilMs = now + snoozeMs
+            }
+            .setNeutralButton(R.string.action_dont_ask_default_browser) { _, _ ->
+                userPreferences.suppressDefaultBrowserPrompt = true
+            }
+            .setOnDismissListener {
+                defaultBrowserPrompt = null
+                if (!DefaultBrowserHelper.isAppDefaultBrowser(this)) {
+                    userPreferences.lastDefaultBrowserPromptEpochMs = System.currentTimeMillis()
+                }
+            }
+            .setCancelable(true)
+            .resizeAndShow() as AlertDialog
+    }
+
+    private companion object {
+        private const val DEFAULT_BROWSER_PROMPT_MIN_INTERVAL_MS = 24L * 60 * 60 * 1000
+        private const val DEFAULT_BROWSER_SNOOZE_MS = 24L * 60 * 60 * 1000
+        private const val STATE_SHOULD_OFFER_APP_OPEN_NATIVE_AD = "should_offer_app_open_native_ad"
+        private const val STATE_PENDING_APP_OPEN_NATIVE_AD = "pending_app_open_native_ad"
     }
 }

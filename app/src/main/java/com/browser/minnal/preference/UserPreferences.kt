@@ -13,6 +13,7 @@ import com.browser.minnal.device.ScreenSize
 import com.browser.minnal.preference.delegates.booleanPreference
 import com.browser.minnal.preference.delegates.enumPreference
 import com.browser.minnal.preference.delegates.intPreference
+import com.browser.minnal.preference.delegates.longPreference
 import com.browser.minnal.preference.delegates.nullableStringPreference
 import com.browser.minnal.preference.delegates.stringPreference
 import com.browser.minnal.search.SearchEngineProvider
@@ -304,6 +305,30 @@ class UserPreferences @Inject constructor(
      * The remote URL from which ad blocking hosts should be read, depending on the [hostsSource].
      */
     var hostsRemoteFile by preferences.nullableStringPreference(HOSTS_REMOTE_FILE)
+
+    /**
+     * If true, the app will not show the dialog suggesting to set this app as the default browser.
+     */
+    var suppressDefaultBrowserPrompt by preferences.booleanPreference(
+        SUPPRESS_DEFAULT_BROWSER_PROMPT,
+        false
+    )
+
+    /**
+     * Epoch millis until which the default-browser prompt stays hidden after the user taps "Not now".
+     */
+    var defaultBrowserPromptSnoozedUntilMs by preferences.longPreference(
+        DEFAULT_BROWSER_PROMPT_SNOOZED_UNTIL,
+        0L
+    )
+
+    /**
+     * Epoch millis of the last time the default-browser prompt was dismissed; used to avoid nagging too often.
+     */
+    var lastDefaultBrowserPromptEpochMs by preferences.longPreference(
+        LAST_DEFAULT_BROWSER_PROMPT_EPOCH_MS,
+        0L
+    )
 }
 
 private const val WEB_RTC = "webRtc"
@@ -356,3 +381,6 @@ private const val SEARCH_SUGGESTIONS = "searchSuggestionsChoice"
 private const val HOSTS_SOURCE = "hostsSource"
 private const val HOSTS_LOCAL_FILE = "hostsLocalFile"
 private const val HOSTS_REMOTE_FILE = "hostsRemoteFile"
+private const val SUPPRESS_DEFAULT_BROWSER_PROMPT = "suppressDefaultBrowserPrompt"
+private const val DEFAULT_BROWSER_PROMPT_SNOOZED_UNTIL = "defaultBrowserPromptSnoozedUntilMs"
+private const val LAST_DEFAULT_BROWSER_PROMPT_EPOCH_MS = "lastDefaultBrowserPromptEpochMs"
