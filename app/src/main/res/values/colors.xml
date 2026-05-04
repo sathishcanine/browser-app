@@ -45,4 +45,7 @@
     <color name="ssl_secured">#4CAF50</color>
     <color name="ssl_unsecured">#F44336</color>
 
+    <!-- Launcher adaptive-icon background (matches Minnal icon edge) -->
+    <color name="ic_launcher_background">#070F1C</color>
+
 </resources>

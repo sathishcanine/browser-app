@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
 
-    <string name="app_name">Lightning</string>
+    <string name="app_name">Minnal Browser</string>
     <string name="action_new_tab">New tab</string>
     <string name="action_share">Share</string>
     <string name="action_history">History</string>
@@ -323,6 +323,11 @@
     </plurals>
     <string name="notification_incognito_running_message">Touch to open</string>
     <string name="notification_incognito_running_description">Ongoing incognito notification</string>
+
+    <string name="native_ad_sponsored">Sponsored</string>
+    <string name="native_ad_expand">Show ad</string>
+    <string name="native_ad_collapse">Hide ad</string>
+    <string name="native_ad_close">Dismiss ad</string>
 
     <!--Ad block -->
     <string name="ad_block_load_failure">Failed to load hosts from ad blocking source.</string>

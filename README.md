@@ -22,6 +22,12 @@ alt="Get it on Google Play" height="80">](https://play.google.com/store/apps/det
 
 * Customizable search suggestions
 
+### SSL certificate errors
+
+Minnal Browser does **not** show the blocking dialog that used to prompt with “Connection to this site is not secure” and “Proceed anyway?”. When a certificate problem is detected, the load **continues without that confirmation step** (unless a per-domain choice was previously saved from an older build, in which case that stored behavior is still applied).
+
+The address bar can still reflect a non-valid SSL state where the UI supports it.
+
 ### Permissions
 
 #### Automatically granted

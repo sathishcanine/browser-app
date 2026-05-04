@@ -104,7 +104,8 @@ class BrowserPresenter @Inject constructor(
         isBookmarked = false,
         isBookmarkEnabled = true,
         isRootFolder = true,
-        findInPage = ""
+        findInPage = "",
+        showBookmarkNativeAdStrip = false
     )
     private var tabListState: List<TabViewState> = emptyList()
     private var currentTab: TabModel? = null
@@ -216,7 +217,8 @@ class BrowserPresenter @Inject constructor(
                     isBackEnabled = false,
                     sslState = SslState.None,
                     progress = 100,
-                    findInPage = ""
+                    findInPage = "",
+                    showBookmarkNativeAdStrip = false
                 )
             )
             view.updateTabs(tabListState.map { it.copy(isSelected = false) })
@@ -259,7 +261,8 @@ class BrowserPresenter @Inject constructor(
                 progress = progress,
                 isBookmarked = isBookmark,
                 isBookmarkEnabled = !isSpecialUrl,
-                findInPage = tab.findQuery.orEmpty()
+                findInPage = tab.findQuery.orEmpty(),
+                showBookmarkNativeAdStrip = url.isBookmarkUrl() && !incognitoMode
             )
         }.observeOn(mainScheduler)
             .subscribe { view.updateState(it) }

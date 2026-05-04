@@ -4,7 +4,6 @@ import com.browser.minnal.R
 import com.browser.minnal.adblock.AdBlocker
 import com.browser.minnal.adblock.allowlist.AllowListModel
 import com.browser.minnal.databinding.DialogAuthRequestBinding
-import com.browser.minnal.databinding.DialogSslWarningBinding
 import com.browser.minnal.extensions.resizeAndShow
 import com.browser.minnal.js.TextReflow
 import com.browser.minnal.log.Logger
@@ -192,55 +191,16 @@ class TabWebViewClient @AssistedInject constructor(
 
     @SuppressLint("WebViewClientOnReceivedSslError")
     override fun onReceivedSslError(webView: WebView, handler: SslErrorHandler, error: SslError) {
-        val context = webView.context
         urlWithSslError = webView.url
 
         sslState = SslState.Invalid(error)
         sslStateObservable.onNext(sslState)
-        sslState = SslState.Invalid(error)
 
         when (sslWarningPreferences.recallBehaviorForDomain(webView.url)) {
-            SslWarningPreferences.Behavior.PROCEED -> return handler.proceed()
-            SslWarningPreferences.Behavior.CANCEL -> return handler.cancel()
-            null -> Unit
+            SslWarningPreferences.Behavior.PROCEED -> handler.proceed()
+            SslWarningPreferences.Behavior.CANCEL -> handler.cancel()
+            null -> handler.proceed()
         }
-
-        val errorCodeMessageCodes = error.getAllSslErrorMessageCodes()
-
-        val stringBuilder = StringBuilder()
-        for (messageCode in errorCodeMessageCodes) {
-            stringBuilder.append(" - ").append(context.getString(messageCode)).append('\n')
-        }
-        val alertMessage =
-            context.getString(R.string.message_insecure_connection, stringBuilder.toString())
-
-        AlertDialog.Builder(context).apply {
-            val view = DialogSslWarningBinding.inflate(LayoutInflater.from(context))
-            val dontAskAgain = view.checkBoxDontAskAgain
-            setTitle(context.getString(R.string.title_warning))
-            setMessage(alertMessage)
-            setCancelable(true)
-            setView(view.root)
-            setOnCancelListener { handler.cancel() }
-            setPositiveButton(context.getString(R.string.action_yes)) { _, _ ->
-                if (dontAskAgain.isChecked) {
-                    sslWarningPreferences.rememberBehaviorForDomain(
-                        webView.url.orEmpty(),
-                        SslWarningPreferences.Behavior.PROCEED
-                    )
-                }
-                handler.proceed()
-            }
-            setNegativeButton(context.getString(R.string.action_no)) { _, _ ->
-                if (dontAskAgain.isChecked) {
-                    sslWarningPreferences.rememberBehaviorForDomain(
-                        webView.url.orEmpty(),
-                        SslWarningPreferences.Behavior.CANCEL
-                    )
-                }
-                handler.cancel()
-            }
-        }.resizeAndShow()
     }
 
     @Deprecated("Deprecated in Java")
@@ -269,31 +229,6 @@ class TabWebViewClient @AssistedInject constructor(
         } else {
             super.shouldInterceptRequest(view, request)
         }
-    }
-
-    private fun SslError.getAllSslErrorMessageCodes(): List<Int> {
-        val errorCodeMessageCodes = ArrayList<Int>(1)
-
-        if (hasError(SslError.SSL_DATE_INVALID)) {
-            errorCodeMessageCodes.add(R.string.message_certificate_date_invalid)
-        }
-        if (hasError(SslError.SSL_EXPIRED)) {
-            errorCodeMessageCodes.add(R.string.message_certificate_expired)
-        }
-        if (hasError(SslError.SSL_IDMISMATCH)) {
-            errorCodeMessageCodes.add(R.string.message_certificate_domain_mismatch)
-        }
-        if (hasError(SslError.SSL_NOTYETVALID)) {
-            errorCodeMessageCodes.add(R.string.message_certificate_not_yet_valid)
-        }
-        if (hasError(SslError.SSL_UNTRUSTED)) {
-            errorCodeMessageCodes.add(R.string.message_certificate_untrusted)
-        }
-        if (hasError(SslError.SSL_INVALID)) {
-            errorCodeMessageCodes.add(R.string.message_certificate_invalid)
-        }
-
-        return errorCodeMessageCodes
     }
 
     /**

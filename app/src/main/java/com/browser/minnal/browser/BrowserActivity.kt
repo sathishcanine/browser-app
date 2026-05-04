@@ -3,6 +3,7 @@ package com.browser.minnal.browser
 import com.browser.minnal.AppTheme
 import com.browser.minnal.R
 import com.browser.minnal.ThemableBrowserActivity
+import com.browser.minnal.ads.BookmarkNativeAdController
 import com.browser.minnal.animation.AnimationUtils
 import com.browser.minnal.browser.bookmark.BookmarkRecyclerViewAdapter
 import com.browser.minnal.browser.color.ColorAnimator
@@ -98,6 +99,8 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
     private val backgroundDrawable by lazy { defaultColor.toDrawable() }
 
     private var customView: View? = null
+
+    private var bookmarkNativeAdController: BookmarkNativeAdController? = null
 
     private var pendingScroll = -1
 
@@ -314,6 +317,10 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
 
         presenter.onViewAttached(BrowserStateAdapter(this))
 
+        if (!isIncognito()) {
+            bookmarkNativeAdController = BookmarkNativeAdController(this, binding.bookmarkNativeAdStrip)
+        }
+
         val suggestionsAdapter = SuggestionsAdapter(this, isIncognito = isIncognito()).apply {
             onSuggestionInsertClick = {
                 if (it is SearchSuggestion) {
@@ -377,8 +384,10 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
+        bookmarkNativeAdController?.destroy()
+        bookmarkNativeAdController = null
         presenter.onViewDetached()
+        super.onDestroy()
     }
 
     override fun onPause() {
@@ -458,6 +467,9 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
                 binding.findBar.isVisible = true
                 binding.findQuery.text = it
             }
+        }
+        viewState.showBookmarkNativeAdStrip?.let { show ->
+            bookmarkNativeAdController?.onPresenterShowBookmarkNativeAd(show)
         }
     }
 

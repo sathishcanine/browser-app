@@ -17,6 +17,8 @@ android {
         targetSdk = 36
         versionName = "5.1.0"
         vectorDrawables.useSupportLibrary = true
+        // AdMob app id (tilde form). Override in `release` with the id from AdMob → Apps → App settings.
+        manifestPlaceholders["admobAppId"] = "ca-app-pub-3940256099942544~3347511713"
     }
 
     val isCi = System.getenv("CI") == "true"
@@ -45,6 +47,11 @@ android {
             setProguardFiles(listOf("proguard-project.txt"))
             enableUnitTestCoverage = false
             enableAndroidTestCoverage = false
+            buildConfigField(
+                "String",
+                "BOOKMARK_NATIVE_AD_UNIT_ID",
+                "\"ca-app-pub-3940256099942544/2247696110\""
+            )
         }
 
         named("release") {
@@ -54,6 +61,13 @@ android {
             setProguardFiles(listOf("proguard-project.txt"))
             enableUnitTestCoverage = false
             enableAndroidTestCoverage = false
+            // Replace with your real AdMob application id (AdMob → Apps → App settings), tilde form.
+            manifestPlaceholders["admobAppId"] = "ca-app-pub-4789468551786381~4851690628"
+            buildConfigField(
+                "String",
+                "BOOKMARK_NATIVE_AD_UNIT_ID",
+                "\"ca-app-pub-4789468551786381/3791531224\""
+            )
 
             ndk {
                 abiFilters.add("arm64-v8a")
@@ -122,6 +136,7 @@ dependencies {
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
     implementation("androidx.webkit:webkit:1.15.0")
     implementation("com.anthonycr.mezzanine:core:$mezzanineVersion")
+    implementation("com.google.android.gms:play-services-ads:23.6.0")
     implementation("com.google.android.material:material:1.13.0")
     implementation("com.google.dagger:dagger:$daggerVersion")
     implementation("com.guolindev.permissionx:permissionx:1.8.1")

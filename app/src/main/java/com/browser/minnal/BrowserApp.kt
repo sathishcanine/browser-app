@@ -16,6 +16,7 @@ import android.app.Application
 import android.os.Build
 import android.os.StrictMode
 import android.webkit.WebView
+import com.google.android.gms.ads.MobileAds
 import com.google.firebase.FirebaseApp
 import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.firebase.crashlytics.FirebaseCrashlytics
@@ -58,6 +59,7 @@ class BrowserApp : Application() {
         super.onCreate()
 
         FirebaseApp.initializeApp(this)
+        MobileAds.initialize(this) {}
         FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(!BuildConfig.DEBUG)
         FirebaseAnalytics.getInstance(this).setAnalyticsCollectionEnabled(true)
 

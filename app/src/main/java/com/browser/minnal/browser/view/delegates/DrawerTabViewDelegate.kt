@@ -1,6 +1,7 @@
 package com.browser.minnal.browser.view.delegates
 
 import com.browser.minnal.browser.view.ViewDelegate
+import com.browser.minnal.databinding.BookmarkNativeAdStripBinding
 import com.browser.minnal.databinding.BrowserActivityDrawerBinding
 import com.browser.minnal.icon.TabCountView
 import com.browser.minnal.search.SearchView
@@ -20,6 +21,7 @@ class DrawerTabViewDelegate(binding: BrowserActivityDrawerBinding) : ViewDelegat
     override val root: CoordinatorLayout = binding.root
     override val toolbar: Toolbar = binding.toolbar
     override val contentFrame: FrameLayout = binding.contentFrame
+    override val bookmarkNativeAdStrip: BookmarkNativeAdStripBinding = binding.bookmarkNativeAdStrip
     override val uiLayout: LinearLayout = binding.uiLayout
     override val browserLayoutContainer: FrameLayout? = null
     override val toolbarLayout: ConstraintLayout = binding.toolbarLayout

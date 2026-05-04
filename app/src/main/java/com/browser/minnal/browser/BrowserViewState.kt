@@ -23,6 +23,7 @@ import com.browser.minnal.utils.Option
  * @param isRootFolder True if the current bookmark folder is the root folder, false if it is a
  * child folder.
  * @param findInPage The text that we are searching the page for.
+ * @param showBookmarkNativeAdStrip True when the bookmarks start page is shown (non-incognito) so the app can show the native ad strip.
  */
 data class BrowserViewState(
     // search bar
@@ -44,7 +45,9 @@ data class BrowserViewState(
     val isRootFolder: Boolean,
 
     // find
-    val findInPage: String
+    val findInPage: String,
+
+    val showBookmarkNativeAdStrip: Boolean
 
 )
 
@@ -71,5 +74,7 @@ data class PartialBrowserViewState(
     val isRootFolder: Boolean?,
 
     // find
-    val findInPage: String?
+    val findInPage: String?,
+
+    val showBookmarkNativeAdStrip: Boolean?
 )

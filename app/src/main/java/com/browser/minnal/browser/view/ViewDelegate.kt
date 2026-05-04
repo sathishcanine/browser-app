@@ -1,5 +1,6 @@
 package com.browser.minnal.browser.view
 
+import com.browser.minnal.databinding.BookmarkNativeAdStripBinding
 import com.browser.minnal.icon.TabCountView
 import com.browser.minnal.search.SearchView
 import android.widget.FrameLayout
@@ -21,6 +22,8 @@ interface ViewDelegate {
     val toolbar: Toolbar
 
     val contentFrame: FrameLayout
+
+    val bookmarkNativeAdStrip: BookmarkNativeAdStripBinding
 
     val uiLayout: LinearLayout
 

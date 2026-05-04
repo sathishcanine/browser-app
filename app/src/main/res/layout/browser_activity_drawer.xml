@@ -198,6 +198,10 @@
                 android:background="@color/primary_color"
                 android:clipChildren="true" />
 
+            <include
+                android:id="@+id/bookmark_native_ad_strip"
+                layout="@layout/bookmark_native_ad_strip" />
+
             <LinearLayout
                 android:id="@+id/find_bar"
                 android:layout_width="match_parent"
