@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("com.github.ben-manes.versions")
@@ -9,13 +11,20 @@ plugins {
     id("com.squareup.sort-dependencies") version "0.17.1"
 }
 
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        keystorePropertiesFile.inputStream().use { load(it) }
+    }
+}
+
 android {
     compileSdk = 36
 
     defaultConfig {
         minSdk = 26
         targetSdk = 36
-        versionName = "5.1.0"
+        versionName = "1.0.0"
         vectorDrawables.useSupportLibrary = true
         // AdMob app id (tilde form). Override in `release` with the id from AdMob → Apps → App settings.
         manifestPlaceholders["admobAppId"] = "ca-app-pub-3940256099942544~3347511713"
@@ -39,6 +48,17 @@ android {
         buildConfig = true
     }
 
+    signingConfigs {
+        if (keystorePropertiesFile.exists()) {
+            create("release") {
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+            }
+        }
+    }
+
     buildTypes {
         named("debug") {
             multiDexEnabled = true
@@ -55,6 +75,9 @@ android {
         }
 
         named("release") {
+            if (keystorePropertiesFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             multiDexEnabled = false
             isMinifyEnabled = !isCi
             isShrinkResources = !isCi
@@ -85,7 +108,7 @@ android {
             dimension = "capabilities"
             buildConfigField("boolean", "FULL_VERSION", "Boolean.parseBoolean(\"true\")")
             applicationId = "com.browser.minnal"
-            versionCode = 101
+            versionCode = 1
         }
 
         if (!isCi) {
@@ -93,7 +116,7 @@ android {
                 dimension = "capabilities"
                 buildConfigField("boolean", "FULL_VERSION", "Boolean.parseBoolean(\"true\")")
                 applicationId = "com.browser.minnal"
-                versionCode = 102
+                versionCode = 1
             }
         }
     }
