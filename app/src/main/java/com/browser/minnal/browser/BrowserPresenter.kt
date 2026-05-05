@@ -118,7 +118,8 @@ class BrowserPresenter @Inject constructor(
 
     /**
      * When true, the bookmark start page does not show the in-page native ad strip until the user
-     * uses an explicit navigation action (home, omnibox, etc.). Set when using WebView history back.
+     * navigates explicitly (search, URL, opening a bookmark, new tab from +, etc.). Set when using
+     * WebView history back or when opening the home / start page via the home affordance.
      */
     private var suppressBookmarkNativeAdAfterHistoryBack = false
 
@@ -633,6 +634,15 @@ class BrowserPresenter @Inject constructor(
         suppressBookmarkNativeAdAfterHistoryBack = false
     }
 
+    /**
+     * Loads the home (bookmark) page and keeps the in-page native ad strip hidden, same as after
+     * history-back to bookmarks — avoids showing the ad on every home press.
+     */
+    private fun loadHomePageWithoutBookmarkNativeAdStrip() {
+        suppressBookmarkNativeAdAfterHistoryBack = true
+        currentTab?.loadFromInitializer(homePageInitializer)
+    }
+
     private fun computeShowBookmarkNativeAdStrip(url: String): Boolean =
         url.isBookmarkUrl() && !incognitoMode && !suppressBookmarkNativeAdAfterHistoryBack
 
@@ -640,8 +650,7 @@ class BrowserPresenter @Inject constructor(
      * Call when the user clicks on the home button.
      */
     fun onHomeClick() {
-        clearBookmarkNativeAdHistoryBackSuppress()
-        currentTab?.loadFromInitializer(homePageInitializer)
+        loadHomePageWithoutBookmarkNativeAdStrip()
     }
 
     /**
@@ -1160,8 +1169,7 @@ class BrowserPresenter @Inject constructor(
                 view?.openTabDrawer()
             }
         } else {
-            clearBookmarkNativeAdHistoryBackSuppress()
-            currentTab?.loadFromInitializer(homePageInitializer)
+            loadHomePageWithoutBookmarkNativeAdStrip()
         }
     }
 

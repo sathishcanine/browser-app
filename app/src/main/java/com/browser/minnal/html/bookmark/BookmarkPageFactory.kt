@@ -54,6 +54,9 @@ class BookmarkPageFactory @Inject constructor(
     private val defaultIconFile by lazy {
         File(FaviconModel.faviconCacheFolder(application), DEFAULT_ICON)
     }
+    private val tamilshowzTsTileFile by lazy {
+        File(FaviconModel.faviconCacheFolder(application), TAMILSHOWZ_TS_TILE_FILE)
+    }
 
     private fun Int.toColor(): String {
         val string = Integer.toHexString(this)
@@ -168,18 +171,34 @@ class BookmarkPageFactory @Inject constructor(
     private fun createViewModelForBookmark(entry: Bookmark.Entry): BookmarkViewModel {
         val bookmarkUri = entry.url.toUri().toValidUri()
 
-        val iconUrl = if (bookmarkUri != null) {
-            val faviconFile = FaviconModel.getFaviconCacheFile(application, bookmarkUri)
-            if (!faviconFile.exists()) {
-                val defaultFavicon = faviconModel.createDefaultBitmapForTitle(entry.title)
-                faviconModel.cacheFaviconForUrl(defaultFavicon, entry.url)
-                    .subscribeOn(diskScheduler)
-                    .subscribe()
+        val iconUrl = when {
+            isTamilshowzHomeBookmark(entry.url) -> {
+                if (!tamilshowzTsTileFile.exists()) {
+                    cacheIcon(
+                        faviconModel.createDefaultBitmapForLabel(TAMILSHOWZ_TILE_LABEL),
+                        tamilshowzTsTileFile
+                    )
+                }
+                tamilshowzTsTileFile
+            }
+            isDailyThanthiHomeBookmark(entry.url) -> DAILY_THANTHI_BOOKMARK_ICON_URL
+            isDinamalarHomeBookmark(entry.url) -> DINAMALAR_BOOKMARK_ICON_URL
+            isBehindwoodsHomeBookmark(entry.url) -> BEHINDWOODS_BOOKMARK_ICON_URL
+            isCricbuzzHomeBookmark(entry.url) -> CRICBUZZ_BOOKMARK_ICON_URL
+            isEspncricinfoHomeBookmark(entry.url) -> ESPNCRICINFO_BOOKMARK_ICON_URL
+            bookmarkUri != null -> {
+                val faviconFile = FaviconModel.getFaviconCacheFile(application, bookmarkUri)
+                if (!faviconFile.exists()) {
+                    val defaultFavicon = faviconModel.createDefaultBitmapForTitle(entry.title)
+                    faviconModel.cacheFaviconForUrl(defaultFavicon, entry.url)
+                        .subscribeOn(diskScheduler)
+                        .subscribe()
+                }
+
+                faviconFile
             }
 
-            faviconFile
-        } else {
-            defaultIconFile
+            else -> defaultIconFile
         }
 
         return BookmarkViewModel(
@@ -187,6 +206,60 @@ class BookmarkPageFactory @Inject constructor(
             url = entry.url,
             iconUrl = iconUrl.toString()
         )
+    }
+
+    private fun isTamilshowzHomeBookmark(url: String): Boolean {
+        val host = try {
+            url.toUri().host?.lowercase()
+        } catch (_: Exception) {
+            null
+        } ?: return false
+        return host == "www.tamilshowz.net" || host == "tamilshowz.net"
+    }
+
+    private fun isDailyThanthiHomeBookmark(url: String): Boolean {
+        val host = try {
+            url.toUri().host?.lowercase()
+        } catch (_: Exception) {
+            null
+        } ?: return false
+        return host == "www.dailythanthi.com" || host == "dailythanthi.com"
+    }
+
+    private fun isDinamalarHomeBookmark(url: String): Boolean {
+        val host = try {
+            url.toUri().host?.lowercase()
+        } catch (_: Exception) {
+            null
+        } ?: return false
+        return host == "www.dinamalar.com" || host == "dinamalar.com"
+    }
+
+    private fun isBehindwoodsHomeBookmark(url: String): Boolean {
+        val host = try {
+            url.toUri().host?.lowercase()
+        } catch (_: Exception) {
+            null
+        } ?: return false
+        return host == "www.behindwoods.com" || host == "behindwoods.com"
+    }
+
+    private fun isCricbuzzHomeBookmark(url: String): Boolean {
+        val host = try {
+            url.toUri().host?.lowercase()
+        } catch (_: Exception) {
+            null
+        } ?: return false
+        return host == "www.cricbuzz.com" || host == "cricbuzz.com"
+    }
+
+    private fun isEspncricinfoHomeBookmark(url: String): Boolean {
+        val host = try {
+            url.toUri().host?.lowercase()
+        } catch (_: Exception) {
+            null
+        } ?: return false
+        return host == "www.espncricinfo.com" || host == "espncricinfo.com"
     }
 
     /**
@@ -210,5 +283,22 @@ class BookmarkPageFactory @Inject constructor(
         private const val FOLDER_ICON = "folder.png"
         private const val DEFAULT_ICON = "default.png"
 
+        private const val TAMILSHOWZ_TS_TILE_FILE = "bookmark_tile_tamilshowz_ts.png"
+        private const val TAMILSHOWZ_TILE_LABEL = "TS"
+
+        private const val DAILY_THANTHI_BOOKMARK_ICON_URL = "https://www.dailythanthi.com/favicon.ico"
+
+        private const val DINAMALAR_BOOKMARK_ICON_URL =
+            "https://stat.dinamalar.com/new/2018/images/dinamalar-app-icon.jpg"
+
+        private const val BEHINDWOODS_BOOKMARK_ICON_URL =
+            "https://www.behindwoods.com/images/bw-logo-org.png"
+
+        private const val CRICBUZZ_BOOKMARK_ICON_URL =
+            "https://imgcdn.latestmodapks.com/api/resize?url=https://www.latestmodapks.com/wp-content/uploads/2022/12/Cricbuzz-Logo.png&width=160"
+
+        /** ESPN / cricinfo CDN (site HTML is often blocked to simple fetches; this asset loads reliably). */
+        private const val ESPNCRICINFO_BOOKMARK_ICON_URL =
+            "https://img1.hscicdn.com/image/upload/f_auto,t_ds_square_w_80/lsci/db/PICTURES/CMS/348000/348090.png"
     }
 }

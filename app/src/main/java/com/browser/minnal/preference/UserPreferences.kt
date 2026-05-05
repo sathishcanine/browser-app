@@ -329,6 +329,47 @@ class UserPreferences @Inject constructor(
         LAST_DEFAULT_BROWSER_PROMPT_EPOCH_MS,
         0L
     )
+
+    /**
+     * True after legacy default bookmarks (Lightning Change Log / Contact Me) were migrated to
+     * Daily Thanthi and Dinamalar for this install.
+     */
+    var legacyDefaultBookmarksMigrated by preferences.booleanPreference(
+        LEGACY_DEFAULT_BOOKMARKS_MIGRATED,
+        false
+    )
+
+    /**
+     * True after the default Wikipedia bookmark was replaced with Behindwoods for this install.
+     */
+    var legacyWikipediaToBehindwoodsMigrated by preferences.booleanPreference(
+        LEGACY_WIKIPEDIA_TO_BEHINDWOODS_MIGRATED,
+        false
+    )
+
+    /**
+     * True after default Google / DuckDuckGo bookmarks were replaced with Cricbuzz / ESPNcricinfo.
+     */
+    var legacyGoogleDuckDuckGoToCricketSitesMigrated by preferences.booleanPreference(
+        LEGACY_GOOGLE_DUCKDUCKGO_TO_CRICKET_SITES_MIGRATED,
+        false
+    )
+
+    /**
+     * True after the default Twitter bookmark was replaced with TamilShowz for this install.
+     */
+    var legacyTwitterToTamilshowzMigrated by preferences.booleanPreference(
+        LEGACY_TWITTER_TO_TAMILSHOWZ_MIGRATED,
+        false
+    )
+
+    /**
+     * True after the TamilShowz bookmark title was updated from "Keepit TS" to "Tamilshowz.net".
+     */
+    var legacyTamilshowzNetBookmarkTitleMigrated by preferences.booleanPreference(
+        LEGACY_TAMILSHOWZ_NET_BOOKMARK_TITLE_MIGRATED,
+        false
+    )
 }
 
 private const val WEB_RTC = "webRtc"
@@ -384,3 +425,10 @@ private const val HOSTS_REMOTE_FILE = "hostsRemoteFile"
 private const val SUPPRESS_DEFAULT_BROWSER_PROMPT = "suppressDefaultBrowserPrompt"
 private const val DEFAULT_BROWSER_PROMPT_SNOOZED_UNTIL = "defaultBrowserPromptSnoozedUntilMs"
 private const val LAST_DEFAULT_BROWSER_PROMPT_EPOCH_MS = "lastDefaultBrowserPromptEpochMs"
+private const val LEGACY_DEFAULT_BOOKMARKS_MIGRATED = "legacyDefaultBookmarksMigrated"
+private const val LEGACY_WIKIPEDIA_TO_BEHINDWOODS_MIGRATED = "legacyWikipediaToBehindwoodsMigrated"
+private const val LEGACY_GOOGLE_DUCKDUCKGO_TO_CRICKET_SITES_MIGRATED =
+    "legacyGoogleDuckDuckGoToCricketSitesMigrated"
+private const val LEGACY_TWITTER_TO_TAMILSHOWZ_MIGRATED = "legacyTwitterToTamilshowzMigrated"
+private const val LEGACY_TAMILSHOWZ_NET_BOOKMARK_TITLE_MIGRATED =
+    "legacyTamilshowzNetBookmarkTitleMigrated"

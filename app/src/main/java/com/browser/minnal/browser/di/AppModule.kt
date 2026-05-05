@@ -9,6 +9,7 @@ import com.browser.minnal.device.BuildType
 import com.browser.minnal.favicon.FaviconCleanup
 import com.browser.minnal.html.ListPageReader
 import com.browser.minnal.html.bookmark.BookmarkCleanup
+import com.browser.minnal.html.bookmark.LegacyDefaultBookmarksMigration
 import com.browser.minnal.html.bookmark.BookmarkPageReader
 import com.browser.minnal.html.download.DownloadCleanup
 import com.browser.minnal.html.history.HistoryCleanup
@@ -221,12 +222,20 @@ class AppModule {
     @Provides
     fun providesCleanupList(
         faviconCleanup: FaviconCleanup,
+        legacyDefaultBookmarksMigration: LegacyDefaultBookmarksMigration,
         bookmarkCleanup: BookmarkCleanup,
         downloadCleanup: DownloadCleanup,
         historyCleanup: HistoryCleanup,
         homeCleanup: HomeCleanup
     ): List<@JvmSuppressWildcards Cleanup.Action> =
-        listOf(faviconCleanup, bookmarkCleanup, downloadCleanup, historyCleanup, homeCleanup)
+        listOf(
+            faviconCleanup,
+            legacyDefaultBookmarksMigration,
+            bookmarkCleanup,
+            downloadCleanup,
+            historyCleanup,
+            homeCleanup
+        )
 
     @FilesDir
     @Provides

@@ -95,6 +95,46 @@ public final class DrawableUtils {
     }
 
     /**
+     * Like {@link #createRoundedLetterImage(Character, int, int, int)} but draws a short label (e.g. two letters).
+     */
+    @NonNull
+    public static Bitmap createRoundedLetterLabelImage(@NonNull String label,
+                                                       int width,
+                                                       int height,
+                                                       int color) {
+        final String text;
+        if (label.isEmpty()) {
+            text = "?";
+        } else {
+            text = label.length() <= 2 ? label : label.substring(0, 2);
+        }
+
+        Bitmap image = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(image);
+        Paint paint = new Paint();
+        paint.setColor(color);
+        Typeface boldText = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD);
+        paint.setTypeface(boldText);
+        paint.setTextSize(text.length() > 1 ? Utils.dpToPx(10) : Utils.dpToPx(14));
+        paint.setAntiAlias(true);
+        paint.setTextAlign(Paint.Align.CENTER);
+
+        final int radius = Utils.dpToPx(6);
+
+        RectF outer = new RectF(0, 0, canvas.getWidth(), canvas.getHeight());
+        canvas.drawRoundRect(outer, radius, radius, paint);
+
+        int xPos = (canvas.getWidth() / 2);
+        int yPos = (int) ((canvas.getHeight() / 2) - ((paint.descent() + paint.ascent()) / 2));
+
+        paint.setColor(Color.WHITE);
+        paint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SRC_OVER));
+        canvas.drawText(text, xPos, yPos, paint);
+
+        return image;
+    }
+
+    /**
      * Hashes a character to one of four colors:
      * blue, green, red, or orange.
      *

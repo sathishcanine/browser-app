@@ -49,6 +49,22 @@ class FaviconModel @Inject constructor(
     }
 
     /**
+     * Default bookmark tile bitmap for a short label (e.g. two-letter icon).
+     */
+    fun createDefaultBitmapForLabel(label: String): Bitmap {
+        val text = label.take(2).ifBlank { "?" }
+        val colorChar = text.first()
+        @ColorInt val defaultFaviconColor =
+            DrawableUtils.characterToColorHash(colorChar, application)
+        return DrawableUtils.createRoundedLetterLabelImage(
+            text,
+            bookmarkIconSize,
+            bookmarkIconSize,
+            defaultFaviconColor
+        )
+    }
+
+    /**
      * Retrieves the favicon for a URL, may be from network or cache.
      *
      * @param url   The URL that we should retrieve the favicon for.
