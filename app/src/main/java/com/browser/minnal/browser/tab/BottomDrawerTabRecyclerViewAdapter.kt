@@ -93,8 +93,10 @@ class BottomDrawerTabRecyclerViewAdapter(
     }
 
     private fun loadImage(imageView: ImageView, tab: TabViewState) {
-        val url = tab.preview.first ?: return run {
-            imageView.load(null)
+        val url = tab.preview.first
+        if (url == null) {
+            imageView.setImageDrawable(null)
+            return
         }
         imageView.tag = tab.id
         imageView.load(File(url)) {

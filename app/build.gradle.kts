@@ -3,12 +3,13 @@ import java.util.Properties
 plugins {
     id("com.android.application")
     id("com.github.ben-manes.versions")
-    id("com.google.gms.google-services")
-    id("com.google.firebase.crashlytics")
     id("com.google.devtools.ksp") version "2.3.7"
     id("com.anthonycr.plugins.mezzanine") version "2.3.0"
     id("com.autonomousapps.dependency-analysis") version "3.10.0"
     id("com.squareup.sort-dependencies") version "0.17.1"
+    // Apply last so merged Firebase JSON / Crashlytics mapping run after other codegen.
+    id("com.google.gms.google-services")
+    id("com.google.firebase.crashlytics")
 }
 
 val keystorePropertiesFile = rootProject.file("key.properties")
@@ -108,7 +109,7 @@ android {
             dimension = "capabilities"
             buildConfigField("boolean", "FULL_VERSION", "Boolean.parseBoolean(\"true\")")
             applicationId = "com.browser.minnal"
-            versionCode = 1
+            versionCode = 3
         }
 
         if (!isCi) {
@@ -116,7 +117,7 @@ android {
                 dimension = "capabilities"
                 buildConfigField("boolean", "FULL_VERSION", "Boolean.parseBoolean(\"true\")")
                 applicationId = "com.browser.minnal"
-                versionCode = 1
+                versionCode = 3
             }
         }
     }
@@ -158,6 +159,9 @@ dependencies {
     implementation("androidx.recyclerview:recyclerview:1.4.0")
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
     implementation("androidx.webkit:webkit:1.15.0")
+    // Pin WorkManager; transitive copy from Firebase/Ads can init at app startup. We disable
+    // WorkManagerInitializer in the manifest and use on-demand init via Configuration.Provider.
+    implementation("androidx.work:work-runtime-ktx:2.10.0")
     implementation("com.anthonycr.mezzanine:core:$mezzanineVersion")
     implementation("com.google.android.gms:play-services-ads:23.6.0")
     implementation("com.google.android.material:material:1.13.0")

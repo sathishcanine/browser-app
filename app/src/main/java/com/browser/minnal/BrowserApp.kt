@@ -15,14 +15,17 @@ import com.browser.minnal.utils.LeakCanaryUtils
 import android.app.Application
 import android.os.Build
 import android.os.StrictMode
+import android.util.Log
 import android.webkit.WebView
 import com.google.android.gms.ads.MobileAds
 import com.google.firebase.FirebaseApp
 import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.firebase.crashlytics.FirebaseCrashlytics
+import androidx.work.Configuration
 import io.reactivex.rxjava3.core.Scheduler
 import io.reactivex.rxjava3.core.Single
 import io.reactivex.rxjava3.plugins.RxJavaPlugins
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 import java.io.File
@@ -32,7 +35,7 @@ import kotlin.system.exitProcess
 /**
  * The browser application.
  */
-class BrowserApp : Application() {
+class BrowserApp : Application(), Configuration.Provider {
 
     @Inject
     internal lateinit var leakCanaryUtils: LeakCanaryUtils
@@ -55,22 +58,39 @@ class BrowserApp : Application() {
 
     lateinit var applicationComponent: AppComponent
 
+    override val workManagerConfiguration: Configuration =
+        Configuration.Builder()
+            .setMinimumLoggingLevel(if (BuildConfig.DEBUG) Log.DEBUG else Log.ERROR)
+            .build()
+
     override fun onCreate() {
         super.onCreate()
 
         // Must run before any code path that can create a WebView (e.g. Mobile Ads). Otherwise the
         // :incognito process shares the default WebView data dir with the main process and crashes.
+        // The Ads SDK also initializes WebView internally on API 28+, so set the main-process suffix
+        // before MobileAds.initialize() to avoid "already initialized" / multi-process directory bugs.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            if (getProcessName() == "$packageName:incognito") {
-                File(dataDir, "app_webview_incognito").deleteRecursively()
-                WebView.setDataDirectorySuffix("incognito")
+            when (getProcessName()) {
+                "$packageName:incognito" -> {
+                    File(dataDir, "app_webview_incognito").deleteRecursively()
+                    WebView.setDataDirectorySuffix("incognito")
+                }
+                packageName -> WebView.setDataDirectorySuffix("main")
             }
         }
 
-        FirebaseApp.initializeApp(this)
-        MobileAds.initialize(this) {}
-        FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(!BuildConfig.DEBUG)
-        FirebaseAnalytics.getInstance(this).setAnalyticsCollectionEnabled(true)
+        runCatching { FirebaseApp.initializeApp(this) }
+            .onFailure { Log.e(TAG, "FirebaseApp.initializeApp failed", it) }
+
+        runCatching { MobileAds.initialize(this) {} }
+            .onFailure { Log.e(TAG, "MobileAds.initialize failed", it) }
+
+        // Crashlytics collection: firebase_crashlytics_collection_enabled in manifest (no getInstance here).
+
+        runCatching {
+            FirebaseAnalytics.getInstance(this).setAnalyticsCollectionEnabled(true)
+        }.onFailure { Log.e(TAG, "Firebase Analytics init failed", it) }
 
         if (BuildConfig.DEBUG) {
             StrictMode.setThreadPolicy(
@@ -87,7 +107,10 @@ class BrowserApp : Application() {
             )
         }
 
-        MainScope().launch {
+        val cleanupFailures = CoroutineExceptionHandler { _, throwable ->
+            crashlyticsOrNull()?.recordException(throwable)
+        }
+        MainScope().launch(cleanupFailures) {
             cleanup.cleanup()
         }
 
@@ -113,7 +136,7 @@ class BrowserApp : Application() {
                 FileUtils.writeCrashToStorage(throwable)
                 throw throwable
             }
-            FirebaseCrashlytics.getInstance().recordException(throwable)
+            crashlyticsOrNull()?.recordException(throwable)
         }
 
         applicationComponent = DaggerAppComponent.builder()
@@ -139,6 +162,16 @@ class BrowserApp : Application() {
             WebView.setWebContentsDebuggingEnabled(true)
         }
     }
+
+    /**
+     * Crashlytics may not register if Firebase components are stripped (R8) or misconfigured.
+     */
+    private fun crashlyticsOrNull(): FirebaseCrashlytics? =
+        try {
+            FirebaseCrashlytics.getInstance()
+        } catch (_: Throwable) {
+            null
+        }
 
     /**
      * Create the [BuildType] from the [BuildConfig].

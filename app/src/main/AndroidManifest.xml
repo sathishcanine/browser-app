@@ -40,6 +40,22 @@
         android:roundIcon="@mipmap/ic_launcher"
         android:taskAffinity="com.anthonycr.browser.AffinityDefault"
         android:usesCleartextTraffic="true">
+        <!-- Eager WorkManager init runs in InitializationProvider and can crash (WorkDatabase/Room)
+             before Application; we use on-demand init via Configuration.Provider on BrowserApp. -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
+        <!-- Avoid FirebaseCrashlytics.getInstance() during Application.onCreate (release R8 / component timing). -->
+        <meta-data
+            android:name="firebase_crashlytics_collection_enabled"
+            android:value="true" />
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="${admobAppId}" />

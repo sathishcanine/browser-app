@@ -71,3 +71,55 @@
 # Firebase Crashlytics (readable stack traces in release)
 -keepattributes SourceFile,LineNumberTable
 -keep public class * extends java.lang.Exception
+
+# Firebase — keep component discovery so Crashlytics registers (avoids
+# "FirebaseCrashlytics component is not present" / NPE from getInstance() in release).
+-keepattributes Signature,*Annotation*,InnerClasses,EnclosingMethod
+-keep class com.google.firebase.** { *; }
+-keep class com.google.android.gms.internal.firebase.** { *; }
+-dontwarn com.google.firebase.**
+
+-keep class com.browser.minnal.BrowserApp { *; }
+-keep class * implements com.google.firebase.components.ComponentRegistrar {
+    *;
+}
+-keep class com.google.firebase.components.** { *; }
+
+# Dagger 2 + Kotlin — reduces IllegalStateException "Unsupported type class …" from Provider chains
+# when R8 shrinks metadata / inline classes used across DI (stack often shows repeated ".get()").
+-keepattributes RuntimeVisibleAnnotations,KotlinMetadata
+-keep class dagger.** { *; }
+-keep interface dagger.** { *; }
+-keep class javax.inject.** { *; }
+-keep interface javax.inject.** { *; }
+-keep class kotlin.Metadata { *; }
+-keepclassmembers class * {
+    @javax.inject.Inject <init>(...);
+}
+-keep class com.browser.minnal.browser.di.** { *; }
+-keep interface com.browser.minnal.browser.di.** { *; }
+-keep enum com.browser.minnal.browser.ui.TabConfiguration { *; }
+-keep enum com.browser.minnal.browser.ui.BookmarkConfiguration { *; }
+-keep class com.browser.minnal.database.adblock.Host { *; }
+
+# Mezzanine (KSP): `mezzanine<BookmarkPageReader>()` matches generated readers by interface type.
+# R8 must not rename those interfaces (crash: Unsupported type interface qc).
+-keepnames interface com.browser.minnal.html.** { *; }
+-keepnames interface com.browser.minnal.js.** { *; }
+-keep class com.anthonycr.mezzanine.** { *; }
+-keep class com.browser.minnal.html.** { *; }
+-keep class com.browser.minnal.js.** { *; }
+
+# WorkManager + Room (transitive via Firebase / Play Services). Without these, R8 can strip
+# androidx.work.impl.WorkDatabase_Impl and startup crashes with:
+# InitializationProvider -> Failed to create an instance of androidx.work.impl.WorkDatabase
+-keep class androidx.work.** { *; }
+-keep interface androidx.work.** { *; }
+-dontwarn androidx.work.impl.**
+
+-keep class * extends androidx.room.RoomDatabase {
+    <init>(...);
+}
+-keep @androidx.room.Entity class *
+-keep @androidx.room.Dao interface *
+-keep class androidx.room.** { *; }
