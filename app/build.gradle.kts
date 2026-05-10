@@ -73,6 +73,18 @@ android {
                 "BOOKMARK_NATIVE_AD_UNIT_ID",
                 "\"ca-app-pub-3940256099942544/2247696110\""
             )
+            // Google's official rewarded test ad unit. Replace in `release` with the real id.
+            buildConfigField(
+                "String",
+                "REWARDED_AD_UNIT_ID",
+                "\"ca-app-pub-3940256099942544/5224354917\""
+            )
+            // Comma-separated hosts (and their subdomains) allowed to call MinnalApp.* JS bridge methods.
+            buildConfigField(
+                "String",
+                "MINNAL_BRIDGE_HOSTS",
+                "\"tamilplay.live,tamiltech.live\""
+            )
         }
 
         named("release") {
@@ -91,6 +103,18 @@ android {
                 "String",
                 "BOOKMARK_NATIVE_AD_UNIT_ID",
                 "\"ca-app-pub-4789468551786381/3791531224\""
+            )
+            // TODO: Replace with the real rewarded ad unit id from AdMob (AdMob → Ad units).
+            buildConfigField(
+                "String",
+                "REWARDED_AD_UNIT_ID",
+                "\"ca-app-pub-3940256099942544/5224354917\""
+            )
+            // Comma-separated hosts (and their subdomains) allowed to call MinnalApp.* JS bridge methods.
+            buildConfigField(
+                "String",
+                "MINNAL_BRIDGE_HOSTS",
+                "\"tamilplay.live,tamiltech.live\""
             )
 
             ndk {

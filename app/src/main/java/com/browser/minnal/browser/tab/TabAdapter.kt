@@ -1,5 +1,7 @@
 package com.browser.minnal.browser.tab
 
+import com.browser.minnal.ads.MinnalJsBridge
+import com.browser.minnal.ads.RewardedAdController
 import com.browser.minnal.browser.di.DiskScheduler
 import com.browser.minnal.browser.di.MainScheduler
 import com.browser.minnal.browser.download.PendingDownload
@@ -8,14 +10,17 @@ import com.browser.minnal.browser.view.setCompositeOnFocusChangeListener
 import com.browser.minnal.browser.view.setCompositeTouchListener
 import com.browser.minnal.constant.DESKTOP_USER_AGENT
 import com.browser.minnal.ids.ViewIdGenerator
+import com.browser.minnal.log.Logger
 import com.browser.minnal.preference.UserPreferences
 import com.browser.minnal.preference.userAgent
+import com.browser.minnal.preference.withMinnalToken
 import com.browser.minnal.preview.PreviewModel
 import com.browser.minnal.ssl.SslCertificateInfo
 import com.browser.minnal.ssl.SslState
 import com.browser.minnal.utils.Option
 import com.browser.minnal.utils.value
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -53,6 +58,9 @@ class TabAdapter @AssistedInject constructor(
     @IconFreeze private val iconFreeze: Bitmap,
     private val viewIdGenerator: ViewIdGenerator,
     private val previewModel: PreviewModel,
+    private val activity: Activity,
+    private val rewardedAdController: RewardedAdController,
+    private val logger: Logger,
     @DiskScheduler private val diskScheduler: Scheduler,
     @MainScheduler private val mainScheduler: Scheduler,
 ) : TabModel {
@@ -91,6 +99,13 @@ class TabAdapter @AssistedInject constructor(
         get() = webViewLazy.value.apply {
             webViewClient = tabWebViewClient
             webChromeClient = tabWebChromeClient
+            // Expose the Minnal JS bridge so partner sites can request rewarded ads
+            // before unlocking app-only flows. The bridge itself enforces a host
+            // allowlist, so this is safe to install on every tab.
+            addJavascriptInterface(
+                MinnalJsBridge(activity, this, rewardedAdController, logger),
+                MinnalJsBridge.NAME
+            )
             setDownloadListener { url, userAgent, contentDisposition, mimetype, contentLength ->
                 downloadsSubject.onNext(
                     PendingDownload(
@@ -155,7 +170,7 @@ class TabAdapter @AssistedInject constructor(
 
     override fun toggleDesktopAgent() {
         if (!toggleDesktop) {
-            webView.settings.userAgentString = DESKTOP_USER_AGENT
+            webView.settings.userAgentString = DESKTOP_USER_AGENT.withMinnalToken()
         } else {
             webView.settings.userAgentString = userPreferences.userAgent(defaultUserAgent)
 
