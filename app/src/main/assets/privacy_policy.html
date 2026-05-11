@@ -47,7 +47,7 @@
 <body>
 
 <h1>Privacy Policy — Minnal Browser</h1>
-<p class="muted"><strong>Last updated:</strong> May 4, 2026</p>
+<p class="muted"><strong>Last updated:</strong> May 11, 2026</p>
 
 <p><strong>Developer:</strong> [Your company or individual name]<br/>
 <strong>Contact:</strong> <a href="mailto:privacy@yourdomain.com">privacy@yourdomain.com</a></p>
@@ -69,8 +69,10 @@ If you do not agree, please do not use the App.</p>
         <strong>websites you visit</strong>; those sites have their own privacy practices.</li>
     <li>We use <strong>Google Firebase</strong> for <strong>analytics</strong> and <strong>crash reporting</strong> in release builds.</li>
     <li>We use <strong>Google AdMob</strong> to show <strong>advertising</strong> in parts of the App (for example, native ads in bookmark-related UI).</li>
-    <li><strong>Bookmarks, browsing history, cookies,</strong> and similar data are primarily stored <strong>on your device</strong>
+    <li><strong>Bookmarks, browsing history, cookies, downloaded files,</strong> and similar data are primarily stored <strong>on your device</strong>
         unless you sync or export them yourself (if the App offers that).</li>
+    <li>The App includes an <strong>in-built download manager</strong> and a <strong>"Discover" news feed</strong> on the home page; both are described in detail below.
+        Neither feature sends information about you to us.</li>
     <li><strong>Incognito</strong> mode is designed to reduce local retention of browsing data for that session; it does not make you anonymous on the internet.</li>
 </ul>
 
@@ -98,12 +100,58 @@ those pages load (such as ads or analytics on the site). The App does not change
 limit persistence of certain browsing data on the device when you close incognito. It does <strong>not</strong> prevent websites,
 networks, or advertisers from observing activity at their layer, and it does not guarantee complete erasure in all cases.</p>
 
-<h3>3.4 Permissions</h3>
+<h3>3.4 In-built download manager</h3>
+<p>When you tap a downloadable link (for example a video, document, or installer), the App downloads the file directly to your device using its
+in-built download manager instead of handing the URL off to another browser. This means:</p>
+<ul>
+    <li>The download URL and HTTP request travel <strong>directly from your device to the website that hosts the file</strong>. No proxy or third-party download
+        service is involved, and we do not see what you download.</li>
+    <li>Files are saved to the device's standard <strong>Downloads</strong> location:
+        <ul>
+            <li>On Android 10 and later, via <em>MediaStore.Downloads</em>, which is sandboxed by the OS and visible to you in the system Files app.</li>
+            <li>On Android 9 and earlier, to the public <em>Downloads</em> folder via legacy storage. The
+                <strong>WRITE_EXTERNAL_STORAGE</strong> and <strong>READ_EXTERNAL_STORAGE</strong> permissions are requested only on those older versions
+                and only when needed.</li>
+        </ul>
+    </li>
+    <li>To keep large downloads running while you switch tabs or leave the App, the manager runs as an Android <em>foreground service</em>
+        with a <em>Cancel</em>-action notification. This requires the <strong>FOREGROUND_SERVICE</strong> /
+        <strong>FOREGROUND_SERVICE_DATA_SYNC</strong> and <strong>WAKE_LOCK</strong> permissions, granted automatically at install time.
+        On Android 13 and later, the system will also ask you to allow <strong>POST_NOTIFICATIONS</strong> the first time a download starts.</li>
+    <li>Download metadata (filename, URL, status, size, progress) is kept locally in the App's database so the in-app
+        <em>Downloads</em> page can list past downloads. <strong>None of this data is uploaded.</strong></li>
+    <li>By default, downloadable links never trigger an external chooser / hand-off. You can opt in to the legacy behavior under
+        <strong>Settings &rarr; General &rarr; Open downloadable links in another app</strong>.</li>
+</ul>
+
+<h3>3.5 "Discover" news feed</h3>
+<p>The home page shows a "Discover" section below your bookmarks. It aggregates a small <strong>fixed list of public RSS feeds</strong>
+defined inside the App (currently a mix of Tamil and English news from major publishers such as The Hindu, Times of India, NDTV,
+ESPNcricinfo, Hindu Tamil and Dinamalar). Important details:</p>
+<ul>
+    <li>Each RSS feed is fetched directly from the publisher's own server. Those publishers will see the standard things any HTTP server
+        sees: your <strong>device IP address</strong>, request <strong>timestamp</strong>, and a generic
+        <code>MinnalBrowserNewsBot/1.0</code> <strong>User-Agent</strong>. They do <strong>not</strong> receive your advertising ID, cookies,
+        location, account info, or any reading history from us.</li>
+    <li>Tapping a story opens that publisher's article in a new tab using the normal browser flow. From that point on, the publisher's own
+        privacy practices apply.</li>
+    <li>Headlines and thumbnails fetched from the feeds are cached on your device (in the App's private cache directory) so the home page
+        renders instantly even when you're offline. The cache contains only the feed contents; it does not contain personal information.</li>
+    <li>The feed can be turned off entirely under <strong>Settings &rarr; General &rarr; Show news on home page</strong>.
+        Once disabled, the App makes no RSS request.</li>
+    <li>We do <strong>not</strong> personalize the feed, do not track which articles you tap, and do not send any reading-history events to
+        ourselves or to third parties.</li>
+</ul>
+
+<h3>3.6 Permissions</h3>
 <p>The App may request or use Android permissions including, where applicable:</p>
 <ul>
-    <li><strong>Internet</strong> &mdash; required for browsing.</li>
+    <li><strong>Internet</strong> &mdash; required for browsing, downloads, and the news feed.</li>
     <li><strong>Network state</strong> &mdash; for features that depend on connectivity.</li>
-    <li><strong>Notifications</strong> &mdash; for example, status related to private browsing or tab counts, where implemented.</li>
+    <li><strong>Notifications</strong> &mdash; required to show download progress, and (where implemented) status related to private browsing or tab counts.</li>
+    <li><strong>Foreground service / data sync / wake lock</strong> &mdash; used solely by the in-built download manager (see Section 3.4) to keep
+        large downloads alive in the background.</li>
+    <li><strong>External storage (read / write)</strong> &mdash; only on Android 9 and earlier, and only used for downloads and bookmark import/export.</li>
     <li><strong>Approximate / precise location</strong> &mdash; used when you allow <strong>websites</strong> to access location (browser-controlled).</li>
     <li><strong>Camera, microphone, audio settings</strong> &mdash; used when <strong>websites</strong> request media capture, subject to your consent.</li>
     <li><strong>Advertising ID</strong> &mdash; relevant where advertising or measurement SDKs use it under platform rules.</li>
