@@ -156,6 +156,8 @@
     <string name="downloads_bridge_missing">Downloads bridge unavailable on this WebView.</string>
     <string name="prefer_external_app_for_downloads_title">Open downloadable links in another app</string>
     <string name="prefer_external_app_for_downloads_summary">When off (recommended), all downloads start directly in Minnal. When on, links like .mp4 first try a video player and may show an "Open with" chooser.</string>
+    <string name="discover_feed_title">Show news on home page</string>
+    <string name="discover_feed_summary">Aggregates a curated set of Tamil + English news feeds (RSS) and shows them below the bookmarks. No accounts, no tracking.</string>
     <string name="incognito_cookies">Enable cookies in incognito mode</string>
     <string name="incognito_cookies_pie">Incognito mode runs in a separate process that is reset after each session. Incognito cookie preferences are now controlled by the regular cookie preferences.</string>
     <string name="action_manual">Manual</string>

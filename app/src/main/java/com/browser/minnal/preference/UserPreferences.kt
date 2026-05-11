@@ -328,6 +328,16 @@ class UserPreferences @Inject constructor(
     )
 
     /**
+     * When true, the in-app home / bookmarks page renders a "Discover" news feed below the
+     * bookmarks grid (RSS aggregated from a curated Tamil + English source list — see
+     * [com.browser.minnal.news.NewsSource.DEFAULTS]). When false the feed section is hidden
+     * and no network calls are made.
+     *
+     * Default on so the home page feels alive out of the box.
+     */
+    var discoverFeedEnabled by preferences.booleanPreference(DISCOVER_FEED_ENABLED, true)
+
+    /**
      * Epoch millis until which the default-browser prompt stays hidden after the user taps "Not now".
      */
     var defaultBrowserPromptSnoozedUntilMs by preferences.longPreference(
@@ -437,6 +447,7 @@ private const val HOSTS_LOCAL_FILE = "hostsLocalFile"
 private const val HOSTS_REMOTE_FILE = "hostsRemoteFile"
 private const val SUPPRESS_DEFAULT_BROWSER_PROMPT = "suppressDefaultBrowserPrompt"
 private const val PREFER_EXTERNAL_APP_FOR_DOWNLOADS = "preferExternalAppForDownloads"
+private const val DISCOVER_FEED_ENABLED = "discoverFeedEnabled"
 private const val DEFAULT_BROWSER_PROMPT_SNOOZED_UNTIL = "defaultBrowserPromptSnoozedUntilMs"
 private const val LAST_DEFAULT_BROWSER_PROMPT_EPOCH_MS = "lastDefaultBrowserPromptEpochMs"
 private const val LEGACY_DEFAULT_BOOKMARKS_MIGRATED = "legacyDefaultBookmarksMigrated"

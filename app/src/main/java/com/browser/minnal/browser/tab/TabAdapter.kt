@@ -4,6 +4,8 @@ import com.browser.minnal.ads.MinnalJsBridge
 import com.browser.minnal.ads.RewardedAdController
 import com.browser.minnal.download.manager.DownloadsBridge
 import com.browser.minnal.download.manager.MinnalDownloadManager
+import com.browser.minnal.news.NewsBridge
+import com.browser.minnal.news.NewsRepository
 import com.browser.minnal.browser.di.DiskScheduler
 import com.browser.minnal.browser.di.MainScheduler
 import com.browser.minnal.browser.download.PendingDownload
@@ -63,6 +65,7 @@ class TabAdapter @AssistedInject constructor(
     private val activity: Activity,
     private val rewardedAdController: RewardedAdController,
     private val minnalDownloadManager: MinnalDownloadManager,
+    private val newsRepository: NewsRepository,
     private val logger: Logger,
     @DiskScheduler private val diskScheduler: Scheduler,
     @MainScheduler private val mainScheduler: Scheduler,
@@ -115,6 +118,12 @@ class TabAdapter @AssistedInject constructor(
             addJavascriptInterface(
                 DownloadsBridge(this, minnalDownloadManager),
                 DownloadsBridge.NAME
+            )
+            // Bridge to the news / discovery feed shown on the home / bookmarks page. Same
+            // URL-gating pattern as the downloads bridge.
+            addJavascriptInterface(
+                NewsBridge(this, newsRepository, userPreferences),
+                NewsBridge.NAME
             )
             setDownloadListener { url, userAgent, contentDisposition, mimetype, contentLength ->
                 downloadsSubject.onNext(

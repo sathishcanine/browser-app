@@ -40,15 +40,17 @@ class DownloadPermissionsHelper @Inject constructor(
         mimeType: String?,
         contentLength: Long
     ) {
-        val permissions = if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
-            // API 28 (Pie) and below need WRITE_EXTERNAL_STORAGE to land bytes in
-            // Environment.DIRECTORY_DOWNLOADS. Newer Android writes via MediaStore.
-            listOf(
-                Manifest.permission.READ_EXTERNAL_STORAGE,
-                Manifest.permission.WRITE_EXTERNAL_STORAGE
-            )
-        } else {
-            emptyList()
+        val permissions = buildList {
+            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+                // API 28 (Pie) and below need WRITE_EXTERNAL_STORAGE to land bytes in
+                // Environment.DIRECTORY_DOWNLOADS. Newer Android writes via MediaStore.
+                add(Manifest.permission.READ_EXTERNAL_STORAGE)
+                add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                // Without this, progress / foreground-service notifications are suppressed (API 33+).
+                add(Manifest.permission.POST_NOTIFICATIONS)
+            }
         }
         val onPermissionsResolved: () -> Unit = {
             val fileName = MimeTypeMap.getFileExtensionFromUrl(url)
@@ -102,12 +104,21 @@ class DownloadPermissionsHelper @Inject constructor(
         } else {
             PermissionX.init(activity)
                 .permissions(permissions)
-                .request { allGranted, _, _ ->
-                    if (allGranted) {
-                        onPermissionsResolved()
-                    } else {
-                        logger.log(TAG, "Download permission denied")
+                .request { _, grantedList, _ ->
+                    val legacyStorageRequired = Build.VERSION.SDK_INT <= Build.VERSION_CODES.P
+                    val storageOk = !legacyStorageRequired ||
+                        grantedList.contains(Manifest.permission.READ_EXTERNAL_STORAGE) &&
+                        grantedList.contains(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    if (!storageOk) {
+                        logger.log(TAG, "Download storage permission denied")
+                        return@request
                     }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        !grantedList.contains(Manifest.permission.POST_NOTIFICATIONS)
+                    ) {
+                        logger.log(TAG, "POST_NOTIFICATIONS denied; download proceeds without shade UI")
+                    }
+                    onPermissionsResolved()
                 }
         }
     }

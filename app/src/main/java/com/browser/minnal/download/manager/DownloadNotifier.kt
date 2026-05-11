@@ -34,10 +34,12 @@ class DownloadNotifier @Inject constructor(
     private fun createChannel() {
         val name = application.getString(R.string.download_channel_name)
         val description = application.getString(R.string.download_channel_description)
+        // DEFAULT so the ongoing download icon appears in the status bar on current Android;
+        // IMPORTANCE_LOW is often silent-only in the shade and easy to miss for demos / users.
         val channel = NotificationChannel(
             CHANNEL_ID,
             name,
-            NotificationManager.IMPORTANCE_LOW
+            NotificationManager.IMPORTANCE_DEFAULT
         ).apply {
             this.description = description
             setShowBadge(false)
@@ -205,7 +207,8 @@ class DownloadNotifier @Inject constructor(
     }
 
     companion object {
-        const val CHANNEL_ID = "channel_downloads"
+        /** Bumped when channel importance / behavior must change (Android keeps first creation). */
+        const val CHANNEL_ID = "channel_downloads_v2"
         const val EXTRA_OPEN_DOWNLOADS = "minnal.extra.open_downloads"
         private const val NOTIFICATION_ID_OFFSET = 0x10_00_00_00
         private const val REQ_OPEN_DOWNLOADS = 0x52_00_00
