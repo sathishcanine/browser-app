@@ -31,8 +31,10 @@ import com.browser.minnal.database.WebPage
 import com.browser.minnal.database.asFolder
 import com.browser.minnal.database.bookmark.BookmarkRepository
 import com.browser.minnal.database.downloads.DownloadEntry
+import com.browser.minnal.database.downloads.DownloadStatus
 import com.browser.minnal.database.downloads.DownloadsRepository
 import com.browser.minnal.database.history.HistoryRepository
+import com.browser.minnal.download.manager.MinnalDownloadManager
 import com.browser.minnal.html.bookmark.BookmarkPageFactory
 import com.browser.minnal.html.history.HistoryPageFactory
 import com.browser.minnal.search.SearchEngineProvider
@@ -87,6 +89,7 @@ class BrowserPresenter @Inject constructor(
     private val allowListModel: AllowListModel,
     private val cookieAdministrator: CookieAdministrator,
     private val tabCountNotifier: TabCountNotifier,
+    private val minnalDownloadManager: MinnalDownloadManager,
     @IncognitoMode private val incognitoMode: Boolean
 ) {
 
@@ -160,6 +163,20 @@ class BrowserPresenter @Inject constructor(
             .switchIfEmpty(model.createTab(homePageInitializer).map(::listOf))
             .subscribe { list ->
                 selectTab(model.selectTab(list.last().id))
+            }
+
+        // When the user accepts a download (the in-built downloader pushes a PENDING state right
+        // after enqueueing the work), pop them straight into the Downloads tab so they can see
+        // live progress without hunting through the menu. We skip the auto-open if they're
+        // already on a downloads page to avoid stacking duplicate tabs when several downloads
+        // are kicked off in quick succession.
+        compositeDisposable += minnalDownloadManager.changes()
+            .filter { it.status == DownloadStatus.PENDING }
+            .observeOn(mainScheduler)
+            .subscribeBy { _ ->
+                if (currentTab?.url?.isDownloadsUrl() != true) {
+                    createNewTabAndSelect(downloadPageInitializer, shouldSelect = true)
+                }
             }
     }
 

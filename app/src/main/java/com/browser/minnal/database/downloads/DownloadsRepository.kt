@@ -37,6 +37,32 @@ interface DownloadsRepository {
     fun addDownloadIfNotExists(entry: DownloadEntry): Single<Boolean>
 
     /**
+     * Inserts a new entry, or replaces an existing one with the same URL. Used by the in-built
+     * downloader so re-issuing a download for the same URL refreshes its row.
+     */
+    fun upsertDownload(entry: DownloadEntry): Completable
+
+    /**
+     * Updates the live progress of an already-persisted download row identified by its URL.
+     */
+    fun updateProgress(
+        url: String,
+        bytesDownloaded: Long,
+        totalBytes: Long,
+        status: DownloadStatus
+    ): Completable
+
+    /**
+     * Updates the terminal status (and optional error message / committed local path) of a row.
+     */
+    fun updateStatus(
+        url: String,
+        status: DownloadStatus,
+        localPath: String? = null,
+        errorMessage: String? = null
+    ): Completable
+
+    /**
      * Adds a list of downloads to the database.
      *
      * @param downloadEntries the downloads to add.

@@ -51,6 +51,12 @@ class GeneralSettingsFragment : AbstractSettingsFragment() {
             onClick = ::showDownloadLocationDialog
         )
 
+        togglePreference(
+            preference = SETTINGS_PREFER_EXTERNAL_APP_FOR_DOWNLOADS,
+            isChecked = userPreferences.preferExternalAppForDownloadableLinks,
+            onCheckChange = { userPreferences.preferExternalAppForDownloadableLinks = it }
+        )
+
         clickableDynamicPreference(
             preference = SETTINGS_HOME,
             summary = homePageUrlToDisplayTitle(userPreferences.homepage),
@@ -408,6 +414,8 @@ class GeneralSettingsFragment : AbstractSettingsFragment() {
         private const val SETTINGS_COLOR_MODE = "cb_colormode"
         private const val SETTINGS_USER_AGENT = "agent"
         private const val SETTINGS_DOWNLOAD = "download"
+        private const val SETTINGS_PREFER_EXTERNAL_APP_FOR_DOWNLOADS =
+            "cb_prefer_external_app_for_downloads"
         private const val SETTINGS_HOME = "home"
         private const val SETTINGS_SEARCH_ENGINE = "search"
         private const val SETTINGS_SUGGESTIONS = "suggestions_choice"

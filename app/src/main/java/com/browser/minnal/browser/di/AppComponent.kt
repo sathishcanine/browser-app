@@ -5,8 +5,15 @@ import com.browser.minnal.ThemableBrowserActivity
 import com.browser.minnal.adblock.BloomFilterAdBlocker
 import com.browser.minnal.adblock.NoOpAdBlocker
 import com.browser.minnal.browser.search.SearchBoxModel
+import com.browser.minnal.database.downloads.DownloadsRepository
 import com.browser.minnal.device.BuildInfo
 import com.browser.minnal.dialog.LightningDialogBuilder
+import com.browser.minnal.download.manager.DownloadEngine
+import com.browser.minnal.download.manager.DownloadNotifier
+import com.browser.minnal.download.manager.DownloadStateBus
+import com.browser.minnal.download.manager.DownloadStorage
+import com.browser.minnal.download.manager.MinnalDownloadManager
+import com.browser.minnal.log.Logger
 import com.browser.minnal.search.SuggestionsAdapter
 import com.browser.minnal.settings.activity.ThemableSettingsActivity
 import com.browser.minnal.settings.fragment.AdBlockSettingsFragment
@@ -72,6 +79,23 @@ interface AppComponent {
     fun provideNoOpAdBlocker(): NoOpAdBlocker
 
     fun browser2ComponentBuilder(): Browser2Component.Builder
+
+    // Accessors for the in-built download manager. Used from non-DI entry points such as
+    // [DownloadWorker] (instantiated by WorkManager via reflection) and
+    // [DownloadActionReceiver] (instantiated by the Android framework).
+    fun minnalDownloadManager(): MinnalDownloadManager
+
+    fun downloadEngine(): DownloadEngine
+
+    fun downloadStorage(): DownloadStorage
+
+    fun downloadNotifier(): DownloadNotifier
+
+    fun downloadStateBus(): DownloadStateBus
+
+    fun downloadsRepository(): DownloadsRepository
+
+    fun logger(): Logger
 
 }
 

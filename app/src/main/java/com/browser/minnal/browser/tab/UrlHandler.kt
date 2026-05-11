@@ -6,6 +6,7 @@ import com.browser.minnal.browser.di.IncognitoMode
 import com.browser.minnal.constant.FILE
 import com.browser.minnal.extensions.snackbar
 import com.browser.minnal.log.Logger
+import com.browser.minnal.preference.UserPreferences
 import com.browser.minnal.utils.IntentUtils
 import com.browser.minnal.utils.Utils
 import com.browser.minnal.utils.isSpecialUrl
@@ -13,6 +14,7 @@ import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.MailTo
+import android.net.Uri
 import android.webkit.MimeTypeMap
 import android.webkit.URLUtil
 import android.webkit.WebView
@@ -29,6 +31,7 @@ class UrlHandler @Inject constructor(
     private val activity: Activity,
     private val logger: Logger,
     private val intentUtils: IntentUtils,
+    private val userPreferences: UserPreferences,
     @IncognitoMode private val incognitoMode: Boolean
 ) {
 
@@ -50,6 +53,19 @@ class UrlHandler @Inject constructor(
             return continueLoadingUrl(view, url, headers)
         }
 
+        // Direct file-download URLs (e.g. https://.../video.mp4) must stay in the WebView so our
+        // download listener fires and our in-built download manager grabs the bytes. Without
+        // this guard, IntentUtils.startActivityForUrl(...) would resolve the URL through
+        // Android's intent system, where apps like Chrome / Samsung Internet / video players
+        // register pathPattern intent filters (host="*" + pathPattern=".*\.mp4") that count as
+        // "specialized handlers" and steal the navigation, popping the system app chooser /
+        // launching Chrome. Users with a real download manager (we have one) almost never want
+        // this. Power users can re-enable hand-off via the same preference that controls the
+        // post-download-listener hand-off.
+        if (!userPreferences.preferExternalAppForDownloadableLinks && looksLikeDirectDownload(url)) {
+            return continueLoadingUrl(view, url, headers)
+        }
+
         return if (isMailOrIntent(url, view) || intentUtils.startActivityForUrl(view, url)) {
             // If it was a mailto: link, or an intent, or could be launched elsewhere, do that
             true
@@ -57,6 +73,20 @@ class UrlHandler @Inject constructor(
             // If none of the special conditions was met, continue with loading the url
             continueLoadingUrl(view, url, headers)
         }
+    }
+
+    /**
+     * Heuristic: does the URL's path end in an extension we'd consider a direct file download?
+     * Conservative on purpose — we deliberately exclude images / html / css / js because the
+     * WebView wants to render those inline.
+     */
+    private fun looksLikeDirectDownload(url: String): Boolean {
+        if (!URLUtil.isNetworkUrl(url)) return false
+        val path = try { Uri.parse(url).path } catch (_: Throwable) { null } ?: return false
+        val lastDot = path.lastIndexOf('.')
+        if (lastDot < 0 || lastDot == path.length - 1) return false
+        val ext = path.substring(lastDot + 1).lowercase()
+        return ext in DOWNLOAD_FILE_EXTENSIONS
     }
 
     private fun continueLoadingUrl(
@@ -140,5 +170,27 @@ class UrlHandler @Inject constructor(
 
     companion object {
         private const val TAG = "UrlHandler"
+
+        /**
+         * URL path extensions for which Minnal should always intercept the navigation and
+         * download the bytes itself, instead of consulting Android's intent system. Kept
+         * intentionally narrow: only file types that have no business being "viewed" inline
+         * by another app (no images, no html, no js).
+         */
+        private val DOWNLOAD_FILE_EXTENSIONS: Set<String> = setOf(
+            // video
+            "mp4", "mkv", "mov", "avi", "webm", "flv", "m4v", "ts", "3gp", "wmv", "mpg", "mpeg",
+            // audio
+            "mp3", "wav", "flac", "aac", "m4a", "ogg", "opus", "wma",
+            // documents
+            "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+            "odt", "odp", "ods", "epub", "mobi",
+            // archives
+            "zip", "rar", "7z", "tar", "gz", "bz2", "xz", "tgz",
+            // installers / disk images
+            "apk", "xapk", "aab", "ipa", "exe", "msi", "dmg", "iso", "deb", "rpm",
+            // misc datasets / blobs
+            "csv", "json", "xml", "torrent", "bin"
+        )
     }
 }

@@ -2,6 +2,8 @@ package com.browser.minnal.browser.tab
 
 import com.browser.minnal.ads.MinnalJsBridge
 import com.browser.minnal.ads.RewardedAdController
+import com.browser.minnal.download.manager.DownloadsBridge
+import com.browser.minnal.download.manager.MinnalDownloadManager
 import com.browser.minnal.browser.di.DiskScheduler
 import com.browser.minnal.browser.di.MainScheduler
 import com.browser.minnal.browser.download.PendingDownload
@@ -60,6 +62,7 @@ class TabAdapter @AssistedInject constructor(
     private val previewModel: PreviewModel,
     private val activity: Activity,
     private val rewardedAdController: RewardedAdController,
+    private val minnalDownloadManager: MinnalDownloadManager,
     private val logger: Logger,
     @DiskScheduler private val diskScheduler: Scheduler,
     @MainScheduler private val mainScheduler: Scheduler,
@@ -105,6 +108,13 @@ class TabAdapter @AssistedInject constructor(
             addJavascriptInterface(
                 MinnalJsBridge(activity, this, rewardedAdController, logger),
                 MinnalJsBridge.NAME
+            )
+            // Bridge to the in-built download manager. The bridge itself enforces a strict URL
+            // gate (only honors calls from the in-app downloads page), so registering it
+            // globally is safe and lets the page survive across navigations within the same tab.
+            addJavascriptInterface(
+                DownloadsBridge(this, minnalDownloadManager),
+                DownloadsBridge.NAME
             )
             setDownloadListener { url, userAgent, contentDisposition, mimetype, contentLength ->
                 downloadsSubject.onNext(

@@ -5,20 +5,14 @@ package com.browser.minnal.download;
 
 import android.app.Activity;
 import android.app.Dialog;
-import android.app.DownloadManager;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Environment;
-import android.text.TextUtils;
-import android.webkit.CookieManager;
-import android.webkit.MimeTypeMap;
 import android.webkit.URLUtil;
-
-import java.io.File;
-import java.io.IOException;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -26,44 +20,36 @@ import javax.inject.Singleton;
 import com.browser.minnal.BuildConfig;
 import com.browser.minnal.R;
 import com.browser.minnal.DefaultBrowserActivity;
-import com.browser.minnal.browser.di.MainScheduler;
-import com.browser.minnal.browser.di.NetworkScheduler;
-import com.browser.minnal.constant.Constants;
 import com.browser.minnal.dialog.BrowserDialog;
+import com.browser.minnal.download.manager.MinnalDownloadManager;
 import com.browser.minnal.extensions.ActivityExtensions;
 import com.browser.minnal.log.Logger;
 import com.browser.minnal.preference.UserPreferences;
-import com.browser.minnal.utils.FileUtils;
-import com.browser.minnal.utils.Utils;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
-import io.reactivex.rxjava3.core.Scheduler;
-import io.reactivex.rxjava3.disposables.Disposable;
 
 /**
- * Handle download requests
+ * Entry point for download requests originating from the WebView's download listener,
+ * the long-press "Save…" dialog, etc.
+ *
+ * The actual byte transfer is owned by {@link MinnalDownloadManager} (in-built downloader); this
+ * class is responsible for:
+ *   - deciding whether a non-attachment URL should be handed off to a streaming app first,
+ *   - performing storage / state preconditions,
+ *   - and enqueueing into the manager.
  */
 @Singleton
 public class DownloadHandler {
 
     private static final String TAG = "DownloadHandler";
 
-    private static final String COOKIE_REQUEST_HEADER = "Cookie";
-
-    private final DownloadManager downloadManager;
-    private final Scheduler networkScheduler;
-    private final Scheduler mainScheduler;
+    private final MinnalDownloadManager minnalDownloadManager;
     private final Logger logger;
 
     @Inject
-    public DownloadHandler(DownloadManager downloadManager,
-                           @NetworkScheduler Scheduler networkScheduler,
-                           @MainScheduler Scheduler mainScheduler,
-                           Logger logger) {
-        this.downloadManager = downloadManager;
-        this.networkScheduler = networkScheduler;
-        this.mainScheduler = mainScheduler;
+    public DownloadHandler(MinnalDownloadManager minnalDownloadManager, Logger logger) {
+        this.minnalDownloadManager = minnalDownloadManager;
         this.logger = logger;
     }
 
@@ -76,7 +62,7 @@ public class DownloadHandler {
      * @param userAgent          User agent of the downloading application.
      * @param contentDisposition Content-disposition http header, if present.
      * @param mimeType           The mimeType of the content reported by the server
-     * @param contentSize        The size of the content
+     * @param contentSize        The size of the content (best-effort, human readable)
      */
     public void onDownloadStart(@NonNull Activity context,
                                 @NonNull UserPreferences manager,
@@ -90,12 +76,13 @@ public class DownloadHandler {
         logger.log(TAG, "DOWNLOAD: MimeType: " + mimeType);
         logger.log(TAG, "DOWNLOAD: User agent: " + userAgent);
 
-        // if we're dealing wih A/V content that's not explicitly marked
-        // for download, check if it's streamable.
-        if (contentDisposition == null
-            || !contentDisposition.regionMatches(true, 0, "attachment", 0, 10)) {
-            // query the package manager to see if there's a registered handler
-            // that matches.
+        // Most users want a download (we have a real in-built manager for it) and not a chooser
+        // popup that surfaces every video player on the device. The "Open in external app" path
+        // is opt-in via [UserPreferences.preferExternalAppForDownloadableLinks]; explicit
+        // attachments always download in-app regardless.
+        boolean isExplicitAttachment = contentDisposition != null
+            && contentDisposition.regionMatches(true, 0, "attachment", 0, 10);
+        if (!isExplicitAttachment && manager.getPreferExternalAppForDownloadableLinks()) {
             Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.setDataAndType(Uri.parse(url), mimeType);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -105,208 +92,86 @@ public class DownloadHandler {
             ResolveInfo info = context.getPackageManager().resolveActivity(intent,
                 PackageManager.MATCH_DEFAULT_ONLY);
             if (info != null) {
-                // If we resolved to ourselves, we don't want to attempt to
-                // load the url only to try and download it again.
-                if (BuildConfig.APPLICATION_ID.equals(info.activityInfo.packageName)
-                    || DefaultBrowserActivity.class.getName().equals(info.activityInfo.name)) {
-                    // someone (other than us) knows how to handle this mime
-                    // type with this scheme, don't download.
+                // Only hand off to an external app when the resolved handler is NOT us,
+                // otherwise we'd loop forever opening our own browser with the same URL.
+                if (!BuildConfig.APPLICATION_ID.equals(info.activityInfo.packageName)
+                    && !DefaultBrowserActivity.class.getName().equals(info.activityInfo.name)) {
                     try {
                         context.startActivity(intent);
                         return;
-                    } catch (ActivityNotFoundException ex) {
-                        // Best behavior is to fall back to a download in this
-                        // case
+                    } catch (ActivityNotFoundException ignored) {
+                        // Fall through to download.
                     }
                 }
             }
         }
-        onDownloadStartNoStream(context, manager, url, userAgent, contentDisposition, mimeType, contentSize);
-    }
-
-    // This is to work around the fact that java.net.URI throws Exceptions
-    // instead of just encoding URL's properly
-    // Helper method for onDownloadStartNoStream
-    @NonNull
-    private static String encodePath(@NonNull String path) {
-        char[] chars = path.toCharArray();
-
-        boolean needed = false;
-        for (char c : chars) {
-            if (c == '[' || c == ']' || c == '|') {
-                needed = true;
-                break;
-            }
-        }
-        if (!needed) {
-            return path;
-        }
-
-        StringBuilder sb = new StringBuilder();
-        for (char c : chars) {
-            if (c == '[' || c == ']' || c == '|') {
-                sb.append('%');
-                sb.append(Integer.toHexString(c));
-            } else {
-                sb.append(c);
-            }
-        }
-
-        return sb.toString();
+        enqueueWithMinnalDownloader(context, url, userAgent, contentDisposition, mimeType, contentSize);
     }
 
     /**
-     * Notify the host application a download should be done, even if there is a
-     * streaming viewer available for thise type.
+     * Perform storage preconditions and hand the download off to {@link MinnalDownloadManager}.
      *
-     * @param context            The context in which the download is requested.
-     * @param url                The full url to the content that should be downloaded
-     * @param userAgent          User agent of the downloading application.
-     * @param contentDisposition Content-disposition http header, if present.
-     * @param mimetype           The mimetype of the content reported by the server
-     * @param contentSize        The size of the content
+     * On API 29+ the manager writes to {@link android.provider.MediaStore} which works without
+     * external storage being mounted; on older devices it writes to
+     * {@link Environment#DIRECTORY_DOWNLOADS}, which requires the SD card to be mounted.
      */
-    /* package */
-    private void onDownloadStartNoStream(@NonNull final Activity context,
-                                         @NonNull UserPreferences preferences,
-                                         @NonNull String url, String userAgent,
-                                         @Nullable String contentDisposition,
-                                         @Nullable String mimetype,
-                                         @NonNull String contentSize) {
-        final String filename = URLUtil.guessFileName(url, contentDisposition, mimetype);
-
-        // Check to see if we have an SDCard
-        String status = Environment.getExternalStorageState();
-        if (!status.equals(Environment.MEDIA_MOUNTED)) {
-            int title;
-            String msg;
-
-            // Check to see if the SDCard is busy, same as the music app
-            if (status.equals(Environment.MEDIA_SHARED)) {
-                msg = context.getString(R.string.download_sdcard_busy_dlg_msg);
-                title = R.string.download_sdcard_busy_dlg_title;
-            } else {
-                msg = context.getString(R.string.download_no_sdcard_dlg_msg);
-                title = R.string.download_no_sdcard_dlg_title;
+    private void enqueueWithMinnalDownloader(@NonNull Activity context,
+                                             @NonNull String url,
+                                             @Nullable String userAgent,
+                                             @Nullable String contentDisposition,
+                                             @Nullable String mimeType,
+                                             @NonNull String contentSize) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            String state = Environment.getExternalStorageState();
+            if (!Environment.MEDIA_MOUNTED.equals(state)) {
+                int title;
+                String msg;
+                if (Environment.MEDIA_SHARED.equals(state)) {
+                    msg = context.getString(R.string.download_sdcard_busy_dlg_msg);
+                    title = R.string.download_sdcard_busy_dlg_title;
+                } else {
+                    msg = context.getString(R.string.download_no_sdcard_dlg_msg);
+                    title = R.string.download_no_sdcard_dlg_title;
+                }
+                Dialog dialog = new AlertDialog.Builder(context).setTitle(title)
+                    .setIcon(android.R.drawable.ic_dialog_alert).setMessage(msg)
+                    .setPositiveButton(R.string.action_ok, null).show();
+                BrowserDialog.setDialogSize(context, dialog);
+                return;
             }
-
-            Dialog dialog = new AlertDialog.Builder(context).setTitle(title)
-                .setIcon(android.R.drawable.ic_dialog_alert).setMessage(msg)
-                .setPositiveButton(R.string.action_ok, null).show();
-            BrowserDialog.setDialogSize(context, dialog);
-            return;
         }
 
-        // java.net.URI is a lot stricter than KURL so we have to encode some
-        // extra characters. Fix for b 2538060 and b 1634719
-        WebAddress webAddress;
+        final long parsedSize = parseLength(contentSize);
         try {
-            webAddress = new WebAddress(url);
-            webAddress.setPath(encodePath(webAddress.getPath()));
-        } catch (Exception e) {
-            // This only happens for very bad urls, we want to catch the
-            // exception here
-            logger.log(TAG, "Exception while trying to parse url '" + url + '\'', e);
-            ActivityExtensions.snackbar(context, R.string.problem_download);
-            return;
-        }
-
-        String addressString = webAddress.toString();
-        Uri uri = Uri.parse(addressString);
-        final DownloadManager.Request request;
-        try {
-            request = new DownloadManager.Request(uri);
+            minnalDownloadManager.enqueue(
+                url,
+                userAgent,
+                contentDisposition,
+                mimeType,
+                parsedSize
+            );
         } catch (IllegalArgumentException e) {
+            logger.log(TAG, "Bad URL passed to download manager: " + url, e);
             ActivityExtensions.snackbar(context, R.string.cannot_download);
             return;
         }
 
-        // set downloaded file destination to /sdcard/Download.
-        // or, should it be set to one of several Environment.DIRECTORY* dirs
-        // depending on mimetype?
-        String location = preferences.getDownloadDirectory();
-        location = FileUtils.addNecessarySlashes(location);
-        Uri downloadFolder = Uri.parse(location);
-
-        if (!isWriteAccessAvailable(downloadFolder)) {
-            ActivityExtensions.snackbar(context, R.string.problem_location_download);
-            return;
-        }
-        String newMimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(Utils.guessFileExtension(filename));
-        logger.log(TAG, "New mimetype: " + newMimeType);
-        request.setMimeType(newMimeType);
-        request.setDestinationUri(Uri.parse(Constants.FILE + location + filename));
-        // let this downloaded file be scanned by MediaScanner - so that it can
-        // show up in Gallery app, for example.
-        request.setVisibleInDownloadsUi(true);
-        request.allowScanningByMediaScanner();
-        request.setDescription(webAddress.getHost());
-        // XXX: Have to use the old url since the cookies were stored using the
-        // old percent-encoded url.
-        String cookies = CookieManager.getInstance().getCookie(url);
-        request.addRequestHeader(COOKIE_REQUEST_HEADER, cookies);
-        request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-
-        //noinspection VariableNotUsedInsideIf
-        if (mimetype == null) {
-            logger.log(TAG, "Mimetype is null");
-            if (TextUtils.isEmpty(addressString)) {
-                return;
-            }
-            // We must have long pressed on a link or image to download it. We
-            // are not sure of the mimetype in this case, so do a head request
-            final Disposable disposable = new FetchUrlMimeType(downloadManager, request, addressString, cookies, userAgent)
-                .create()
-                .subscribeOn(networkScheduler)
-                .observeOn(mainScheduler)
-                .subscribe(result -> {
-                    switch (result) {
-                        case FAILURE_ENQUEUE:
-                            ActivityExtensions.snackbar(context, R.string.cannot_download);
-                            break;
-                        case FAILURE_LOCATION:
-                            ActivityExtensions.snackbar(context, R.string.problem_location_download);
-                            break;
-                        case SUCCESS:
-                            ActivityExtensions.snackbar(context, R.string.download_pending);
-                            break;
-                    }
-                });
-        } else {
-            logger.log(TAG, "Valid mimetype, attempting to download");
-            try {
-                downloadManager.enqueue(request);
-            } catch (IllegalArgumentException e) {
-                // Probably got a bad URL or something
-                logger.log(TAG, "Unable to enqueue request", e);
-                ActivityExtensions.snackbar(context, R.string.cannot_download);
-            } catch (SecurityException e) {
-                // TODO write a download utility that downloads files rather than rely on the system
-                // because the system can only handle Environment.getExternal... as a path
-                ActivityExtensions.snackbar(context, R.string.problem_location_download);
-            }
-            ActivityExtensions.snackbar(context, context.getString(R.string.download_pending) + ' ' + filename);
-        }
+        final String filename = URLUtil.guessFileName(url, contentDisposition, mimeType);
+        ActivityExtensions.snackbar(
+            context,
+            context.getString(R.string.download_pending) + ' ' + filename
+        );
     }
 
-    private static boolean isWriteAccessAvailable(@NonNull Uri fileUri) {
-        if (fileUri.getPath() == null) {
-            return false;
-        }
-        File file = new File(fileUri.getPath());
-
-        if (!file.isDirectory() && !file.mkdirs()) {
-            return false;
-        }
-
-        try {
-            if (file.createNewFile()) {
-                //noinspection ResultOfMethodCallIgnored
-                file.delete();
-            }
-            return true;
-        } catch (IOException ignored) {
-            return false;
-        }
+    /**
+     * Pulls a numeric byte count out of the human-readable {@code contentSize} string the
+     * permission helper hands us. Returns -1 when it can't be inferred (the engine will figure
+     * out the real size from the HTTP response anyway).
+     */
+    private static long parseLength(@Nullable String contentSize) {
+        if (contentSize == null) return -1L;
+        // We get strings like "12.3 MB" or "Unknown size" from the dialog code; not worth
+        // round-tripping that into bytes here. The engine will overwrite with the true value.
+        return -1L;
     }
 }

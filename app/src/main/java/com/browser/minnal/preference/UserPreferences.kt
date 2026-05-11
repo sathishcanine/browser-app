@@ -315,6 +315,19 @@ class UserPreferences @Inject constructor(
     )
 
     /**
+     * When true, downloadable URLs that aren't explicitly attachments (e.g. a direct `.mp4`
+     * link) are first offered to an external streaming app via an `ACTION_VIEW` intent — which
+     * is what surfaces the system "Open with…" chooser. When false (the default), every
+     * download-listener event goes straight into the in-built [com.browser.minnal.download.manager.MinnalDownloadManager]
+     * with no chooser popup. We default to off because users who expect a real download manager
+     * (we have one) almost never want to be interrupted by a chooser.
+     */
+    var preferExternalAppForDownloadableLinks by preferences.booleanPreference(
+        PREFER_EXTERNAL_APP_FOR_DOWNLOADS,
+        false
+    )
+
+    /**
      * Epoch millis until which the default-browser prompt stays hidden after the user taps "Not now".
      */
     var defaultBrowserPromptSnoozedUntilMs by preferences.longPreference(
@@ -423,6 +436,7 @@ private const val HOSTS_SOURCE = "hostsSource"
 private const val HOSTS_LOCAL_FILE = "hostsLocalFile"
 private const val HOSTS_REMOTE_FILE = "hostsRemoteFile"
 private const val SUPPRESS_DEFAULT_BROWSER_PROMPT = "suppressDefaultBrowserPrompt"
+private const val PREFER_EXTERNAL_APP_FOR_DOWNLOADS = "preferExternalAppForDownloads"
 private const val DEFAULT_BROWSER_PROMPT_SNOOZED_UNTIL = "defaultBrowserPromptSnoozedUntilMs"
 private const val LAST_DEFAULT_BROWSER_PROMPT_EPOCH_MS = "lastDefaultBrowserPromptEpochMs"
 private const val LEGACY_DEFAULT_BOOKMARKS_MIGRATED = "legacyDefaultBookmarksMigrated"

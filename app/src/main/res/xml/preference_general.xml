@@ -31,6 +31,11 @@
         <Preference
             android:key="download"
             android:title="@string/download"/>
+        <SwitchPreference
+            android:defaultValue="false"
+            android:key="cb_prefer_external_app_for_downloads"
+            android:summary="@string/prefer_external_app_for_downloads_summary"
+            android:title="@string/prefer_external_app_for_downloads_title"/>
         <Preference
             android:key="home"
             android:title="@string/home"/>
