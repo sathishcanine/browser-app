@@ -186,6 +186,8 @@
     <string name="settings_privacy">Privacy instellingen</string>
     <string name="settings_about">Over</string>
     <string name="settings_about_explain">Details over versie, auteur en licensie.</string>
+    <string name="settings_version_title_format">Versie %1$s</string>
+    <string name="settings_version_code_format">Versienummer %1$d</string>
     <string name="close_tab">Sluit tabblad</string>
     <string name="close_all_tabs">Alle tabbladen sluiten</string>
     <string name="close_other_tabs">Alle andere tabbladen sluiten</string>

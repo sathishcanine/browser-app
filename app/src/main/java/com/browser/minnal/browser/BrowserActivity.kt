@@ -51,10 +51,14 @@ import com.browser.minnal.extensions.takeIfInstance
 import com.browser.minnal.extensions.tint
 import com.browser.minnal.search.SuggestionsAdapter
 import com.browser.minnal.ssl.createSslDrawableForState
+import com.browser.minnal.update.ForceUpdateRemoteConfig
 import com.browser.minnal.utils.DefaultBrowserHelper
 import com.browser.minnal.utils.value
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.ActivityInfo
+import java.lang.ref.WeakReference
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.view.Gravity
@@ -80,6 +84,10 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.SimpleItemAnimator
+import com.google.android.play.core.appupdate.AppUpdateManagerFactory
+import com.google.android.play.core.appupdate.AppUpdateOptions
+import com.google.android.play.core.install.model.AppUpdateType
+import com.google.android.play.core.install.model.UpdateAvailability
 import javax.inject.Inject
 
 /**
@@ -114,6 +122,8 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
 
     private var defaultBrowserPrompt: AlertDialog? = null
 
+    private var forceUpdateDialog: AlertDialog? = null
+
     @Suppress("ConvertLambdaToReference")
     private val launcher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -122,6 +132,10 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
     private val defaultBrowserRoleLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { /* system UI completed; no follow-up required */ }
+
+    private val playImmediateUpdateLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult(),
+    ) { /* Play immediate update typically restarts the process. */ }
 
     @Inject
     internal lateinit var imageLoader: ImageLoader
@@ -413,6 +427,94 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         onBackPressedDispatcher.addCallback {
             presenter.onNavigateBack()
         }
+
+        if (savedInstanceState == null) {
+            scheduleForceUpdateRemoteConfigCheck()
+        }
+    }
+
+    /**
+     * Fetches Remote Config off the main thread. If this build is below the minimum supported
+     * version, shows a blocking [AlertDialog] on the browser (home) screen.
+     */
+    private fun scheduleForceUpdateRemoteConfigCheck() {
+        val appContext = applicationContext
+        val activityRef = WeakReference(this)
+        Thread(
+            {
+                runCatching {
+                    ForceUpdateRemoteConfig.fetchAndActivateBlocking(appContext)
+                }
+                val needs = ForceUpdateRemoteConfig.readNeedsForceUpdate()
+                runOnUiThread {
+                    val activity = activityRef.get()
+                    if (activity == null || activity.isFinishing) {
+                        return@runOnUiThread
+                    }
+                    if (needs) {
+                        activity.showForceUpdateRequiredDialog()
+                    }
+                }
+            },
+            "remote-config-force-update",
+        ).start()
+    }
+
+    private fun showForceUpdateRequiredDialog() {
+        if (forceUpdateDialog?.isShowing == true) {
+            return
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.force_update_title)
+            .setMessage(R.string.force_update_message)
+            .setPositiveButton(R.string.force_update_button_play, null)
+            .setNeutralButton(R.string.force_update_button_store, null)
+            .setCancelable(false)
+            .create()
+        dialog.setCanceledOnTouchOutside(false)
+        dialog.setOnKeyListener { _, keyCode, _ -> keyCode == KeyEvent.KEYCODE_BACK }
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                startImmediatePlayUpdateFlow()
+            }
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                openPlayStoreForForceUpdate()
+            }
+        }
+        dialog.show()
+        forceUpdateDialog = dialog
+    }
+
+    private fun startImmediatePlayUpdateFlow() {
+        val appUpdateManager = AppUpdateManagerFactory.create(this)
+        appUpdateManager.appUpdateInfo
+            .addOnSuccessListener { info ->
+                val inProgress =
+                    info.updateAvailability() == UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS
+                val available =
+                    info.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE &&
+                        info.isUpdateTypeAllowed(AppUpdateType.IMMEDIATE)
+                if (inProgress || available) {
+                    appUpdateManager.startUpdateFlowForResult(
+                        info,
+                        playImmediateUpdateLauncher,
+                        AppUpdateOptions.newBuilder(AppUpdateType.IMMEDIATE).build(),
+                    )
+                } else {
+                    openPlayStoreForForceUpdate()
+                }
+            }
+            .addOnFailureListener { openPlayStoreForForceUpdate() }
+    }
+
+    private fun openPlayStoreForForceUpdate() {
+        val marketUri = Uri.parse("market://details?id=$packageName")
+        val webUri = Uri.parse("https://play.google.com/store/apps/details?id=$packageName")
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, marketUri))
+        } catch (_: ActivityNotFoundException) {
+            startActivity(Intent(Intent.ACTION_VIEW, webUri))
+        }
     }
 
     override fun onStart() {
@@ -454,6 +556,8 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
     override fun onDestroy() {
         defaultBrowserPrompt?.dismiss()
         defaultBrowserPrompt = null
+        forceUpdateDialog?.dismiss()
+        forceUpdateDialog = null
         bookmarkNativeAdController?.destroy()
         bookmarkNativeAdController = null
         appOpenNativeAdController?.destroy()

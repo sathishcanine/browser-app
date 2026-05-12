@@ -39,4 +39,7 @@
         app:fragment="com.browser.minnal.settings.fragment.DebugSettingsFragment"
         app:key="DEBUG"
         app:title="@string/debug_title" />
+    <Preference
+        app:key="app_version_footer"
+        app:selectable="false" />
 </PreferenceScreen>
