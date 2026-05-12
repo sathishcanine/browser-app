@@ -24,6 +24,12 @@
     <string name="agent">User agent</string>
     <string name="home">Homepage</string>
     <string name="fullscreen">Full-screen mode</string>
+    <string name="force_update_title">Update required</string>
+    <string name="force_update_message">A newer version of the app is required to continue. Install the update from Google Play.</string>
+    <string name="force_update_button_play">Update now</string>
+    <string name="force_update_button_store">Open Play Store</string>
+    <string name="settings_version_title_format">Version %1$s</string>
+    <string name="settings_version_code_format">Version code %1$d</string>
     <string name="java">Enable JavaScript</string>
     <string name="download">Download location</string>
     <string name="settings_advanced">Advanced Settings</string>

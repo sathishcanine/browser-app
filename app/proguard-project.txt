@@ -123,3 +123,27 @@
 -keep @androidx.room.Entity class *
 -keep @androidx.room.Dao interface *
 -keep class androidx.room.** { *; }
+
+# WebView JavaScript bridges (MinnalApp, MinnalDownloads, MinnalNews). Without this, R8 renames
+# @JavascriptInterface methods in release: JS calls fail silently (try/catch → empty list),
+# while WorkManager may still run — matching "Play bundle: no ads / no download UI progress".
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
+# Explicit hosts (Kotlin + R8): bookmarks Discover section calls isEnabled() before un-hiding;
+# if that name is obfuscated the IIFE catches and returns — section stays hidden (no news).
+-keepclassmembers class com.browser.minnal.ads.MinnalJsBridge {
+    @android.webkit.JavascriptInterface <methods>;
+}
+-keepclassmembers class com.browser.minnal.download.manager.DownloadsBridge {
+    @android.webkit.JavascriptInterface <methods>;
+}
+-keepclassmembers class com.browser.minnal.news.NewsBridge {
+    @android.webkit.JavascriptInterface <methods>;
+}
+
+# WorkManager default factory instantiates workers by reflection on this constructor.
+-keep class com.browser.minnal.download.manager.DownloadWorker {
+    public <init>(android.content.Context,androidx.work.WorkerParameters);
+}
+-keepnames class com.browser.minnal.download.manager.DownloadWorker

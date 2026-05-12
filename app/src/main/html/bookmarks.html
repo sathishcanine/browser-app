@@ -424,7 +424,12 @@
         (function() {
             var BRIDGE = (typeof MinnalNews !== "undefined") ? MinnalNews : null;
             if (!BRIDGE) return;
-            try { if (!BRIDGE.isEnabled()) return; } catch (_) { return; }
+            // If isEnabled is missing (e.g. release shrink), do not abort the whole block — still try list().
+            var discoverOn = true;
+            try {
+                if (typeof BRIDGE.isEnabled === "function") discoverOn = BRIDGE.isEnabled();
+            } catch (_) { discoverOn = true; }
+            if (!discoverOn) return;
 
             var section = document.getElementById("discover");
             var listEl = document.getElementById("discover_list");

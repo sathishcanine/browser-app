@@ -2,6 +2,7 @@ import java.util.Properties
 
 plugins {
     id("com.android.application")
+    id("org.jetbrains.kotlin.android")
     id("com.github.ben-manes.versions")
     id("com.google.devtools.ksp") version "2.3.7"
     id("com.anthonycr.plugins.mezzanine") version "2.3.0"
@@ -133,7 +134,7 @@ android {
             dimension = "capabilities"
             buildConfigField("boolean", "FULL_VERSION", "Boolean.parseBoolean(\"true\")")
             applicationId = "com.browser.minnal"
-            versionCode = 4
+            versionCode = 5
         }
 
         if (!isCi) {
@@ -141,7 +142,7 @@ android {
                 dimension = "capabilities"
                 buildConfigField("boolean", "FULL_VERSION", "Boolean.parseBoolean(\"true\")")
                 applicationId = "com.browser.minnal"
-                versionCode = 4
+                versionCode = 5
             }
         }
     }
@@ -208,7 +209,9 @@ dependencies {
 
     implementation(platform("com.google.firebase:firebase-bom:33.9.0"))
     implementation("com.google.firebase:firebase-analytics-ktx")
+    implementation("com.google.firebase:firebase-config-ktx")
     implementation("com.google.firebase:firebase-crashlytics-ktx")
+    implementation("com.google.android.play:app-update:2.1.0")
 
     debugImplementation("com.squareup.leakcanary:leakcanary-android:2.14")
 
