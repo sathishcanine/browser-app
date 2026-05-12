@@ -113,7 +113,9 @@
     <string name="download_channel_name">Downloads</string>
     <string name="download_channel_description">Notifications for files being downloaded by the browser.</string>
     <string name="rewarded_dismissed_title">Reward not earned</string>
-    <string name="rewarded_dismissed_message">The video was not completed, so nothing was unlocked. This page will refresh when you close this message.</string>
+    <string name="rewarded_dismissed_message">The video was not completed, 
+    so nothing was unlocked. 
+    Watch ad to ger Reward!</string>
     <string name="download_progress_known">%1$s of %2$s</string>
     <string name="download_progress_unknown">%1$s downloaded</string>
     <string name="download_complete">Download complete</string>
