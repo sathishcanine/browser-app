@@ -1,7 +1,5 @@
 package com.browser.minnal.browser.tab
 
-import com.browser.minnal.ads.MinnalJsBridge
-import com.browser.minnal.ads.RewardedAdController
 import com.browser.minnal.download.manager.DownloadsBridge
 import com.browser.minnal.download.manager.MinnalDownloadManager
 import com.browser.minnal.news.NewsBridge
@@ -63,7 +61,6 @@ class TabAdapter @AssistedInject constructor(
     private val viewIdGenerator: ViewIdGenerator,
     private val previewModel: PreviewModel,
     private val activity: Activity,
-    private val rewardedAdController: RewardedAdController,
     private val minnalDownloadManager: MinnalDownloadManager,
     private val newsRepository: NewsRepository,
     private val logger: Logger,
@@ -105,13 +102,6 @@ class TabAdapter @AssistedInject constructor(
         get() = webViewLazy.value.apply {
             webViewClient = tabWebViewClient
             webChromeClient = tabWebChromeClient
-            // Expose the Minnal JS bridge so partner sites can request rewarded ads
-            // before unlocking app-only flows. The bridge itself enforces a host
-            // allowlist, so this is safe to install on every tab.
-            addJavascriptInterface(
-                MinnalJsBridge(activity, this, rewardedAdController, logger),
-                MinnalJsBridge.NAME
-            )
             // Bridge to the in-built download manager. The bridge itself enforces a strict URL
             // gate (only honors calls from the in-app downloads page), so registering it
             // globally is safe and lets the page survive across navigations within the same tab.
