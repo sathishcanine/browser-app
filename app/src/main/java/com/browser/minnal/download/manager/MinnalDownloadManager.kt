@@ -142,20 +142,25 @@ class MinnalDownloadManager @Inject constructor(
     }
 
     /**
-     * Pause a download. Implemented as "cancel the worker and mark PAUSED". Bytes already on
-     * disk are kept; calling [resume] later restarts the worker which Range-resumes from the
-     * partial file via the validators stored on the row.
+     * Pause a download. Implemented as "mark PAUSED, then cancel the worker". Bytes on disk are
+     * kept; [DownloadWorker] must see PAUSED when handling cancellation so it does not treat pause
+     * as a full cancel (which would delete staging). [resume] restarts the worker, which
+     * Range-resumes using validators on the row.
      */
     fun pause(url: String) {
-        WorkManager.getInstance(application).cancelUniqueWork(workName(url))
         repository.updateStatus(
             url = url,
             status = DownloadStatus.PAUSED,
-            errorMessage = null
-        ).subscribe({}, { logger.log(TAG, "pause: status update failed", it) })
-        stateBus.snapshot(url)?.let {
-            stateBus.update(it.copy(status = DownloadStatus.PAUSED))
-        }
+            errorMessage = null,
+        ).subscribe(
+            {
+                WorkManager.getInstance(application).cancelUniqueWork(workName(url))
+                stateBus.snapshot(url)?.let {
+                    stateBus.update(it.copy(status = DownloadStatus.PAUSED))
+                }
+            },
+            { logger.log(TAG, "pause: status update failed", it) },
+        )
     }
 
     /** Resume (or restart) a previously paused/failed download. */

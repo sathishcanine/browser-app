@@ -225,11 +225,38 @@ class DownloadWorker(
     }
 
     private fun onCancelled(entry: DownloadEntry, staging: File) {
+        val latest = repository.findDownloadForUrl(entry.url).blockingGet()
+        if (latest != null && DownloadStatus.fromName(latest.status) == DownloadStatus.PAUSED) {
+            val bytes = runCatching { staging.length() }.getOrDefault(0L).coerceAtLeast(0L)
+            runCatching {
+                repository.updateProgress(
+                    url = latest.url,
+                    bytesDownloaded = bytes,
+                    totalBytes = latest.totalBytes,
+                    status = DownloadStatus.PAUSED,
+                ).blockingAwait()
+            }
+            runCatching {
+                bus.update(
+                    DownloadState(
+                        url = latest.url,
+                        title = latest.title,
+                        status = DownloadStatus.PAUSED,
+                        bytesDownloaded = bytes,
+                        totalBytes = latest.totalBytes,
+                        mimeType = latest.mimeType,
+                    ),
+                )
+            }
+            runCatching { notifier.cancel(entry.url) }
+            return
+        }
+
         runCatching {
             repository.updateStatus(
                 url = entry.url,
                 status = DownloadStatus.CANCELLED,
-                errorMessage = null
+                errorMessage = null,
             ).blockingAwait()
         }
         runCatching { storage.deleteStaging(entry.url) }
@@ -241,8 +268,8 @@ class DownloadWorker(
                     status = DownloadStatus.CANCELLED,
                     bytesDownloaded = staging.length().coerceAtLeast(0L),
                     totalBytes = entry.totalBytes,
-                    mimeType = entry.mimeType
-                )
+                    mimeType = entry.mimeType,
+                ),
             )
         }
         runCatching { notifier.cancel(entry.url) }
