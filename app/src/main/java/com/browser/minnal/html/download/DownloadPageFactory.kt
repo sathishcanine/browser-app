@@ -379,11 +379,6 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
         return Math.floor(diff / 86400000) + "d ago";
     }
 
-    function host(url) {
-        if (!url) return "";
-        try { return new URL(url).host; } catch (_) { return url.slice(0, 40); }
-    }
-
     function escape(s) {
         if (s == null) return "";
         return String(s).replace(/[&<>"']/g, function(c) {
@@ -565,8 +560,6 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
         } else if (status === "FAILED" && item.errorMessage) {
             bits.push('<span class="sep err">' + escape(item.errorMessage) + '</span>');
         }
-        var hostName = host(item.url);
-        if (hostName) bits.push('<span class="sep">' + escape(hostName) + '</span>');
         if (item.updatedAt) bits.push('<span class="sep">' + escape(relativeTime(item.updatedAt)) + '</span>');
         return '<div class="meta">' + bits.join(" ") + '</div>';
     }
@@ -593,7 +586,6 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
         if (status === "COMPLETED") {
             rows.push('<button data-action="share">' + ICON.share + ' ' + LABELS.actions.share + '</button>');
         }
-        rows.push('<button data-action="copy-url">' + ICON.copy + ' ' + LABELS.actions.copyUrl + '</button>');
         rows.push('<button class="danger" data-action="delete">' + ICON.trash + ' ' + LABELS.actions.removeFromList + '</button>');
         if (status === "COMPLETED") {
             rows.push('<button class="danger" data-action="delete-with-file">' + ICON.trash + ' ' + LABELS.actions.deleteFile + '</button>');
@@ -647,10 +639,6 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
             case "share":
                 copyToClipboard(item ? (item.localPath || item.url) : "");
                 toast(LABELS.toast.linkCopied);
-                break;
-            case "copy-url":
-                copyToClipboard(url);
-                toast(LABELS.toast.urlCopied);
                 break;
         }
         // Optimistic refresh — actual state will come back on next poll.
@@ -754,7 +742,6 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
                 "retry": ${s(R.string.downloads_action_retry)},
                 "open": ${s(R.string.downloads_action_open)},
                 "share": ${s(R.string.downloads_action_share)},
-                "copyUrl": ${s(R.string.downloads_action_copy_url)},
                 "removeFromList": ${s(R.string.downloads_action_remove_from_list)},
                 "deleteFile": ${s(R.string.downloads_action_delete_file)},
                 "delete": ${s(R.string.downloads_action_delete)}
@@ -782,7 +769,6 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
                 "removed": ${s(R.string.downloads_toast_removed)},
                 "deletedFile": ${s(R.string.downloads_toast_deleted_file)},
                 "linkCopied": ${s(R.string.downloads_toast_link_copied)},
-                "urlCopied": ${s(R.string.downloads_toast_url_copied)},
                 "cannotOpen": ${s(R.string.downloads_toast_cannot_open)}
             },
             "bulk": {
