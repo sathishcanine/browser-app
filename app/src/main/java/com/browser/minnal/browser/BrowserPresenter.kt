@@ -17,6 +17,7 @@ import com.browser.minnal.browser.tab.DownloadPageInitializer
 import com.browser.minnal.browser.tab.HistoryPageInitializer
 import com.browser.minnal.browser.tab.HomePageInitializer
 import com.browser.minnal.browser.tab.NoOpInitializer
+import com.browser.minnal.browser.tab.PopupTabGate
 import com.browser.minnal.browser.tab.TabInitializer
 import com.browser.minnal.browser.tab.TabModel
 import com.browser.minnal.browser.tab.TabViewState
@@ -90,6 +91,7 @@ class BrowserPresenter @Inject constructor(
     private val cookieAdministrator: CookieAdministrator,
     private val tabCountNotifier: TabCountNotifier,
     private val minnalDownloadManager: MinnalDownloadManager,
+    private val popupTabGate: PopupTabGate,
     @IncognitoMode private val incognitoMode: Boolean
 ) {
 
@@ -308,10 +310,24 @@ class BrowserPresenter @Inject constructor(
         tabDisposable += tab.createWindowRequests()
             .subscribeOn(mainScheduler)
             .subscribeBy {
+                if (!popupTabGate.shouldAllowPopupWindow()) {
+                    return@subscribeBy
+                }
+                popupTabGate.recordPopupWindowOpened()
                 createNewTabAndSelect(
                     tabInitializer = it,
-                    shouldSelect = true,
+                    shouldSelect = false,
                     tabType = TabModel.Type.POP_UP
+                )
+            }
+
+        tabDisposable += tab.backgroundTabUrlRequests()
+            .subscribeOn(mainScheduler)
+            .subscribeBy { url ->
+                createNewTabAndSelect(
+                    tabInitializer = UrlInitializer(url),
+                    shouldSelect = false,
+                    tabType = TabModel.Type.POP_UP,
                 )
             }
 

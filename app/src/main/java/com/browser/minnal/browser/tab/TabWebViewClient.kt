@@ -14,7 +14,9 @@ import android.annotation.SuppressLint
 import android.app.Application
 import android.graphics.Bitmap
 import android.net.http.SslError
+import android.os.Build
 import android.os.Message
+import android.webkit.WebResourceError
 import android.view.LayoutInflater
 import android.webkit.HttpAuthHandler
 import android.webkit.SslErrorHandler
@@ -58,6 +60,11 @@ class TabWebViewClient @AssistedInject constructor(
     private val files by lazy {
         File(application.filesDir, "generated-html")
     }
+
+    /**
+     * Set by [TabAdapter] so ad / intent redirects can open in a background tab.
+     */
+    var onRequestNewTab: ((String) -> Unit)? = null
 
     /**
      * Emits changes to the current URL.
@@ -203,15 +210,62 @@ class TabWebViewClient @AssistedInject constructor(
         }
     }
 
+    private fun delegateUrlLoading(view: WebView, url: String, isForMainFrame: Boolean, hasGesture: Boolean): Boolean =
+        urlHandler.shouldOverrideLoading(
+            view = view,
+            url = url,
+            headers = headers,
+            isForMainFrame = isForMainFrame,
+            hasGesture = hasGesture,
+            currentPageUrl = view.url,
+            requestNewTab = onRequestNewTab,
+        )
+
     @Deprecated("Deprecated in Java")
     override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
-        return urlHandler.shouldOverrideLoading(view, url, headers) ||
+        return delegateUrlLoading(view, url, isForMainFrame = true, hasGesture = false) ||
             super.shouldOverrideUrlLoading(view, url)
     }
 
     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-        return urlHandler.shouldOverrideLoading(view, request.url.toString(), headers) ||
-            super.shouldOverrideUrlLoading(view, request)
+        return delegateUrlLoading(
+            view = view,
+            url = request.url.toString(),
+            isForMainFrame = request.isForMainFrame,
+            hasGesture = request.hasGesture(),
+        ) || super.shouldOverrideUrlLoading(view, request)
+    }
+
+    override fun onReceivedError(
+        view: WebView,
+        request: WebResourceRequest,
+        error: WebResourceError,
+    ) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+            request.isForMainFrame &&
+            error.errorCode == WebViewClient.ERROR_UNSUPPORTED_SCHEME
+        ) {
+            val url = request.url.toString()
+            if (urlHandler.tryRecoverFromIntentSchemeError(view, url, headers, onRequestNewTab)) {
+                return
+            }
+        }
+        super.onReceivedError(view, request, error)
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onReceivedError(
+        view: WebView,
+        errorCode: Int,
+        description: String,
+        failingUrl: String,
+    ) {
+        if (errorCode == WebViewClient.ERROR_UNSUPPORTED_SCHEME &&
+            urlHandler.tryRecoverFromIntentSchemeError(view, failingUrl, headers, onRequestNewTab)
+        ) {
+            return
+        }
+        super.onReceivedError(view, errorCode, description, failingUrl)
     }
 
     override fun shouldInterceptRequest(

@@ -1,6 +1,5 @@
 package com.browser.minnal.adblock.source
 
-import com.browser.minnal.BuildConfig
 import com.browser.minnal.adblock.parser.HostsFileParser
 import com.browser.minnal.log.Logger
 import android.content.res.AssetManager
@@ -43,11 +42,13 @@ class AssetsHostsDataSource @Inject constructor(
         HostsResult.Success(domains)
     }
 
-    override suspend fun identifier(): String = "assets:${BuildConfig.VERSION_CODE}"
+    // Bump when replacing app/src/main/assets/hosts.txt so cached bloom filters reload.
+    override suspend fun identifier(): String = "assets:$HOSTS_BUNDLE_REVISION"
 
     companion object {
         private const val TAG = "AssetsHostsDataSource"
         private const val BLOCKED_DOMAINS_LIST_FILE_NAME = "hosts.txt"
+        private const val HOSTS_BUNDLE_REVISION = "stevenblack-20260523"
     }
 
 }

@@ -63,6 +63,7 @@ class TabAdapter @AssistedInject constructor(
     private val activity: Activity,
     private val minnalDownloadManager: MinnalDownloadManager,
     private val newsRepository: NewsRepository,
+    private val popupTabGate: PopupTabGate,
     private val logger: Logger,
     @DiskScheduler private val diskScheduler: Scheduler,
     @MainScheduler private val mainScheduler: Scheduler,
@@ -85,6 +86,7 @@ class TabAdapter @AssistedInject constructor(
     private var findInPageQuery: String? = null
     private var toggleDesktop: Boolean = false
     private val downloadsSubject = PublishSubject.create<PendingDownload>()
+    private val backgroundTabUrlSubject = PublishSubject.create<String>()
     private val focusObservable = BehaviorSubject.createDefault(false)
 
     private var previewGeneratedTime = System.currentTimeMillis()
@@ -134,6 +136,7 @@ class TabAdapter @AssistedInject constructor(
 
             setCompositeTouchListener("focus") { view, event ->
                 if (event.action == MotionEvent.ACTION_DOWN) {
+                    popupTabGate.onUserGesture()
                     if (!view.hasFocus()) {
                         view.requestFocus()
                     }
@@ -144,6 +147,7 @@ class TabAdapter @AssistedInject constructor(
         }
 
     init {
+        tabWebViewClient.onRequestNewTab = { url -> backgroundTabUrlSubject.onNext(url) }
         if (tabInitializer !is FreezableBundleInitializer) {
             loadFromInitializer(tabInitializer)
         }
@@ -307,6 +311,9 @@ class TabAdapter @AssistedInject constructor(
 
     override fun createWindowRequests(): Observable<TabInitializer> =
         tabWebChromeClient.createWindowObservable.hide()
+
+    override fun backgroundTabUrlRequests(): Observable<String> =
+        backgroundTabUrlSubject.hide()
 
     override fun closeWindowRequests(): Observable<Unit> =
         tabWebChromeClient.closeWindowObservable.hide()

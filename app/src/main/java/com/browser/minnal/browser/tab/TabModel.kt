@@ -231,6 +231,11 @@ interface TabModel {
     fun createWindowRequests(): Observable<TabInitializer>
 
     /**
+     * Emits http(s) URLs that should load in a new background tab (ad / intent redirects).
+     */
+    fun backgroundTabUrlRequests(): Observable<String>
+
+    /**
      * Emits requests by the browser to automatically close the current tab.
      */
     fun closeWindowRequests(): Observable<Unit>
