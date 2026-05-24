@@ -115,6 +115,14 @@ fun String?.isHistoryUrl(): Boolean =
 fun String?.isStartPageUrl(): Boolean =
     this != null && this.startsWith(FILE) && this.endsWith(HomePageFactory.FILENAME)
 
+/**
+ * Partner CDN hosts that require a rewarded ad before starting a superfast download.
+ */
+fun String.requiresRewardedAdGateForDownload(): Boolean {
+    val lower = lowercase(Locale.ROOT)
+    return lower.contains("cld.") || lower.contains("cds.")
+}
+
 private val ACCEPTED_URI_SCHEMA =
     Pattern.compile("(?i)((?:http|https|file)://|(?:inline|data|about|javascript):|(?:.*:.*@))(.*)")
 const val QUERY_PLACE_HOLDER = "%s"

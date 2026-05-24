@@ -1,10 +1,13 @@
 package com.browser.minnal.browser.download
 
 import com.browser.minnal.R
+import com.browser.minnal.ads.RewardedDownloadAdHelper
 import com.browser.minnal.dialog.BrowserDialog.setDialogSize
 import com.browser.minnal.download.DownloadHandler
+import com.browser.minnal.extensions.snackbar
 import com.browser.minnal.log.Logger
 import com.browser.minnal.preference.UserPreferences
+import com.browser.minnal.utils.requiresRewardedAdGateForDownload
 import android.Manifest
 import android.app.Dialog
 import android.content.DialogInterface
@@ -26,6 +29,7 @@ import javax.inject.Inject
 class DownloadPermissionsHelper @Inject constructor(
     private val downloadHandler: DownloadHandler,
     private val userPreferences: UserPreferences,
+    private val rewardedDownloadAdHelper: RewardedDownloadAdHelper,
     private val logger: Logger
 ) {
 
@@ -53,50 +57,26 @@ class DownloadPermissionsHelper @Inject constructor(
             }
         }
         val onPermissionsResolved: () -> Unit = {
-            val fileName = MimeTypeMap.getFileExtensionFromUrl(url)
-                .takeIf(String::isNotBlank)
-                ?: if (MimeTypeMap.getSingleton().hasMimeType(mimeType)) {
-                    URLUtil.guessFileName(url, contentDisposition, mimeType)
-                } else {
-                    url
-                }
-            val downloadSize: String = if (contentLength > 0) {
-                Formatter.formatFileSize(activity, contentLength)
-            } else {
-                activity.getString(R.string.unknown_size)
-            }
-            val dialogClickListener = DialogInterface.OnClickListener { _, which: Int ->
-                when (which) {
-                    DialogInterface.BUTTON_POSITIVE -> {
-                        downloadHandler.onDownloadStart(
-                            activity,
-                            userPreferences,
-                            url,
-                            userAgent,
-                            contentDisposition,
-                            mimeType,
-                            downloadSize
-                        )
-                    }
-
-                    DialogInterface.BUTTON_NEGATIVE -> {
-                    }
-                }
-            }
-            val builder = AlertDialog.Builder(activity)
-            val message: String = activity.getString(R.string.dialog_download, downloadSize)
-            val dialog: Dialog = builder.setTitle(fileName)
-                .setMessage(message)
-                .setPositiveButton(
-                    activity.resources.getString(R.string.action_download),
-                    dialogClickListener
+            if (url.requiresRewardedAdGateForDownload()) {
+                rewardedDownloadAdHelper.preload(activity)
+                showRewardedDownloadGate(
+                    activity = activity,
+                    url = url,
+                    userAgent = userAgent,
+                    contentDisposition = contentDisposition,
+                    mimeType = mimeType,
+                    contentLength = contentLength,
                 )
-                .setNegativeButton(
-                    activity.resources.getString(R.string.action_cancel),
-                    dialogClickListener
-                ).show()
-            setDialogSize(activity, dialog)
-            logger.log(TAG, "Downloading: $fileName")
+            } else {
+                showStandardDownloadConfirmation(
+                    activity = activity,
+                    url = url,
+                    userAgent = userAgent,
+                    contentDisposition = contentDisposition,
+                    mimeType = mimeType,
+                    contentLength = contentLength,
+                )
+            }
         }
 
         if (permissions.isEmpty()) {
@@ -121,6 +101,133 @@ class DownloadPermissionsHelper @Inject constructor(
                     onPermissionsResolved()
                 }
         }
+    }
+
+    private fun showRewardedDownloadGate(
+        activity: FragmentActivity,
+        url: String,
+        userAgent: String?,
+        contentDisposition: String?,
+        mimeType: String?,
+        contentLength: Long,
+    ) {
+        val fileName = resolveDisplayFileName(url, contentDisposition, mimeType)
+        val dialogClickListener = DialogInterface.OnClickListener { _, which: Int ->
+            when (which) {
+                DialogInterface.BUTTON_POSITIVE -> {
+                    rewardedDownloadAdHelper.show(
+                        activity = activity,
+                        onRewarded = {
+                            startDownload(
+                                activity = activity,
+                                url = url,
+                                userAgent = userAgent,
+                                contentDisposition = contentDisposition,
+                                mimeType = mimeType,
+                                contentLength = contentLength,
+                            )
+                        },
+                        onDismissedWithoutReward = {
+                            logger.log(TAG, "Rewarded download ad dismissed without reward: $fileName")
+                        },
+                        onUnavailable = {
+                            activity.snackbar(R.string.message_rewarded_download_ad_unavailable)
+                        },
+                    )
+                }
+
+                DialogInterface.BUTTON_NEGATIVE -> {
+                    logger.log(TAG, "Rewarded download cancelled: $fileName")
+                }
+            }
+        }
+        val dialog: Dialog = AlertDialog.Builder(activity)
+            .setTitle(fileName)
+            .setMessage(R.string.dialog_rewarded_download_message)
+            .setPositiveButton(R.string.action_watch_ad_superfast_download, dialogClickListener)
+            .setNegativeButton(R.string.action_cancel_download, dialogClickListener)
+            .show()
+        setDialogSize(activity, dialog)
+        logger.log(TAG, "Rewarded download gate: $fileName")
+    }
+
+    private fun showStandardDownloadConfirmation(
+        activity: FragmentActivity,
+        url: String,
+        userAgent: String?,
+        contentDisposition: String?,
+        mimeType: String?,
+        contentLength: Long,
+    ) {
+        val fileName = resolveDisplayFileName(url, contentDisposition, mimeType)
+        val downloadSize: String = if (contentLength > 0) {
+            Formatter.formatFileSize(activity, contentLength)
+        } else {
+            activity.getString(R.string.unknown_size)
+        }
+        val dialogClickListener = DialogInterface.OnClickListener { _, which: Int ->
+            when (which) {
+                DialogInterface.BUTTON_POSITIVE -> {
+                    startDownload(
+                        activity = activity,
+                        url = url,
+                        userAgent = userAgent,
+                        contentDisposition = contentDisposition,
+                        mimeType = mimeType,
+                        contentLength = contentLength,
+                    )
+                }
+
+                DialogInterface.BUTTON_NEGATIVE -> {
+                }
+            }
+        }
+        val dialog: Dialog = AlertDialog.Builder(activity)
+            .setTitle(fileName)
+            .setMessage(activity.getString(R.string.dialog_download, downloadSize))
+            .setPositiveButton(R.string.action_download, dialogClickListener)
+            .setNegativeButton(R.string.action_cancel, dialogClickListener)
+            .show()
+        setDialogSize(activity, dialog)
+        logger.log(TAG, "Downloading: $fileName")
+    }
+
+    private fun startDownload(
+        activity: FragmentActivity,
+        url: String,
+        userAgent: String?,
+        contentDisposition: String?,
+        mimeType: String?,
+        contentLength: Long,
+    ) {
+        val downloadSize: String = if (contentLength > 0) {
+            Formatter.formatFileSize(activity, contentLength)
+        } else {
+            activity.getString(R.string.unknown_size)
+        }
+        downloadHandler.onDownloadStart(
+            activity,
+            userPreferences,
+            url,
+            userAgent,
+            contentDisposition,
+            mimeType,
+            downloadSize
+        )
+    }
+
+    private fun resolveDisplayFileName(
+        url: String,
+        contentDisposition: String?,
+        mimeType: String?,
+    ): String {
+        val extension = MimeTypeMap.getFileExtensionFromUrl(url)
+        return extension.takeIf(String::isNotBlank)
+            ?: if (MimeTypeMap.getSingleton().hasMimeType(mimeType)) {
+                URLUtil.guessFileName(url, contentDisposition, mimeType)
+            } else {
+                url
+            }
     }
 
     companion object {

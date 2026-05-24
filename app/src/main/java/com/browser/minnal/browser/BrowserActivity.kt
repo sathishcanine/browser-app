@@ -3,6 +3,7 @@ package com.browser.minnal.browser
 import com.browser.minnal.AppTheme
 import com.browser.minnal.R
 import com.browser.minnal.ThemableBrowserActivity
+import com.browser.minnal.ads.ActiveTimeInterstitialController
 import com.browser.minnal.ads.BookmarkNativeAdController
 import com.browser.minnal.animation.AnimationUtils
 import com.browser.minnal.browser.bookmark.BookmarkRecyclerViewAdapter
@@ -118,6 +119,8 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
     private var pendingAppOpenNativeAd = false
     private var lastBookmarkNativeAdStripVisible = false
 
+    private var interstitialAccumulatedActiveMs = 0L
+
     private var pendingScroll = -1
 
     private var defaultBrowserPrompt: AlertDialog? = null
@@ -171,6 +174,9 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
     @Inject
     internal lateinit var mainHandler: Handler
 
+    @Inject
+    internal lateinit var activeTimeInterstitialController: ActiveTimeInterstitialController
+
     /**
      * True if the activity is operating in incognito mode, false otherwise.
      */
@@ -198,6 +204,10 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
             pendingAppOpenNativeAd = savedInstanceState.getBoolean(
                 STATE_PENDING_APP_OPEN_NATIVE_AD,
                 false
+            )
+            interstitialAccumulatedActiveMs = savedInstanceState.getLong(
+                STATE_INTERSTITIAL_ACCUMULATED_MS,
+                0L,
             )
         }
         binding = when (userPreferences.tabConfiguration) {
@@ -237,6 +247,10 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
             .incognitoMode(isIncognito())
             .build()
             .inject(this)
+
+        if (savedInstanceState != null) {
+            activeTimeInterstitialController.restoreAccumulatedActiveMs(interstitialAccumulatedActiveMs)
+        }
 
         binding.drawerLayout.addDrawerListener(object : DrawerLayout.SimpleDrawerListener() {
 
@@ -530,6 +544,15 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         binding.root.post { syncAppOpenNativeAd() }
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (!isIncognito()) {
+            activeTimeInterstitialController.onBrowserResumed(this) {
+                customView == null && !isFinishing
+            }
+        }
+    }
+
     override fun onStop() {
         if (!isChangingConfigurations && !isIncognito()) {
             shouldOfferAppOpenNativeAdOnNextForeground = true
@@ -541,6 +564,7 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         super.onSaveInstanceState(outState)
         outState.putBoolean(STATE_SHOULD_OFFER_APP_OPEN_NATIVE_AD, shouldOfferAppOpenNativeAdOnNextForeground)
         outState.putBoolean(STATE_PENDING_APP_OPEN_NATIVE_AD, pendingAppOpenNativeAd)
+        outState.putLong(STATE_INTERSTITIAL_ACCUMULATED_MS, interstitialAccumulatedActiveMs)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -567,6 +591,9 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
     }
 
     override fun onPause() {
+        if (!isIncognito()) {
+            interstitialAccumulatedActiveMs = activeTimeInterstitialController.pauseAndGetAccumulatedMs()
+        }
         super.onPause()
         presenter.onViewHidden()
     }
@@ -1116,5 +1143,6 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         private const val DEFAULT_BROWSER_SNOOZE_MS = 24L * 60 * 60 * 1000
         private const val STATE_SHOULD_OFFER_APP_OPEN_NATIVE_AD = "should_offer_app_open_native_ad"
         private const val STATE_PENDING_APP_OPEN_NATIVE_AD = "pending_app_open_native_ad"
+        private const val STATE_INTERSTITIAL_ACCUMULATED_MS = "interstitial_accumulated_active_ms"
     }
 }
