@@ -74,6 +74,16 @@ android {
                 "BOOKMARK_NATIVE_AD_UNIT_ID",
                 "\"ca-app-pub-3940256099942544/2247696110\""
             )
+            buildConfigField(
+                "String",
+                "REWARDED_AD_ONE",
+                "\"ca-app-pub-3940256099942544/5224354917\""
+            )
+            buildConfigField(
+                "String",
+                "INTERSTITIAL_AD_ONE",
+                "\"ca-app-pub-3940256099942544/1033173712\""
+            )
         }
 
         named("release") {
@@ -86,12 +96,21 @@ android {
             setProguardFiles(listOf("proguard-project.txt"))
             enableUnitTestCoverage = false
             enableAndroidTestCoverage = false
-            // Replace with your real AdMob application id (AdMob → Apps → App settings), tilde form.
-            manifestPlaceholders["admobAppId"] = "ca-app-pub-4789468551786381~4851690628"
+            manifestPlaceholders["admobAppId"] = "ca-app-pub-8723888126390754~8021947515"
             buildConfigField(
                 "String",
                 "BOOKMARK_NATIVE_AD_UNIT_ID",
-                "\"ca-app-pub-4789468551786381/3791531224\""
+                "\"ca-app-pub-8723888126390754/2176244375\""
+            )
+            buildConfigField(
+                "String",
+                "REWARDED_AD_ONE",
+                "\"ca-app-pub-8723888126390754/1021424890\""
+            )
+            buildConfigField(
+                "String",
+                "INTERSTITIAL_AD_ONE",
+                "\"ca-app-pub-8723888126390754/4960669900\""
             )
 
             ndk {
@@ -110,7 +129,7 @@ android {
             dimension = "capabilities"
             buildConfigField("boolean", "FULL_VERSION", "Boolean.parseBoolean(\"true\")")
             applicationId = "com.browser.minnal"
-            versionCode = 7
+            versionCode = 8
         }
 
         if (!isCi) {
@@ -118,7 +137,7 @@ android {
                 dimension = "capabilities"
                 buildConfigField("boolean", "FULL_VERSION", "Boolean.parseBoolean(\"true\")")
                 applicationId = "com.browser.minnal"
-                versionCode = 7
+                versionCode = 8
             }
         }
     }
