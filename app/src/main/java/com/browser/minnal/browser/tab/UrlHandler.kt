@@ -13,12 +13,14 @@ import com.browser.minnal.utils.isSpecialUrl
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.MailTo
 import android.net.Uri
 import android.webkit.MimeTypeMap
 import android.webkit.URLUtil
 import android.webkit.WebView
 import androidx.core.content.FileProvider
+import androidx.core.net.toUri
 import java.io.File
 import java.net.URISyntaxException
 import javax.inject.Inject
@@ -32,6 +34,7 @@ class UrlHandler @Inject constructor(
     private val logger: Logger,
     private val intentUtils: IntentUtils,
     private val userPreferences: UserPreferences,
+    private val popupTabGate: PopupTabGate,
     @IncognitoMode private val incognitoMode: Boolean
 ) {
 
@@ -42,7 +45,11 @@ class UrlHandler @Inject constructor(
     fun shouldOverrideLoading(
         view: WebView,
         url: String,
-        headers: Map<String, String>
+        headers: Map<String, String>,
+        isForMainFrame: Boolean = true,
+        hasGesture: Boolean = false,
+        currentPageUrl: String? = null,
+        requestNewTab: ((String) -> Unit)? = null,
     ): Boolean {
         if (incognitoMode) {
             // If we are in incognito, immediately load, we don't want the url to leave the app
@@ -66,13 +73,242 @@ class UrlHandler @Inject constructor(
             return continueLoadingUrl(view, url, headers)
         }
 
+        // Keep http(s) navigations inside Minnal — do not hand off to Chrome via intents.
+        if (URLUtil.isHttpUrl(url) || URLUtil.isHttpsUrl(url)) {
+            if (shouldOpenInBackgroundTab(url, isForMainFrame, hasGesture, currentPageUrl)) {
+                return openInBackgroundTab(view, url, requestNewTab)
+            }
+            return continueLoadingUrl(view, url, headers)
+        }
+
+        if (url.startsWith("intent:", ignoreCase = true)) {
+            return handleIntentUrl(view, url, headers, requestNewTab)
+        }
+
+        val browserDeepLink = extractHttpUrlFromBrowserDeepLink(url)
+        if (browserDeepLink != null) {
+            return openInBackgroundTab(view, browserDeepLink, requestNewTab)
+        }
+
         return if (isMailOrIntent(url, view) || intentUtils.startActivityForUrl(view, url)) {
-            // If it was a mailto: link, or an intent, or could be launched elsewhere, do that
+            // If it was a mailto: link, or could be launched elsewhere, do that
             true
         } else {
             // If none of the special conditions was met, continue with loading the url
             continueLoadingUrl(view, url, headers)
         }
+    }
+
+    /**
+     * Ad / redirect networks often use `intent://…#Intent;package=com.android.chrome;…` to force
+     * Chrome. Prefer [browser_fallback_url] or an http(s) [Intent.data] in this WebView instead.
+     */
+    private fun handleIntentUrl(
+        view: WebView,
+        url: String,
+        headers: Map<String, String>,
+        requestNewTab: ((String) -> Unit)?,
+    ): Boolean {
+        val intent = try {
+            Intent.parseUri(url, Intent.URI_INTENT_SCHEME)
+        } catch (e: URISyntaxException) {
+            logger.log(TAG, "Bad intent URL: $url", e)
+            view.stopLoading()
+            return true
+        }
+
+        intent.addCategory(Intent.CATEGORY_BROWSABLE)
+        intent.component = null
+        intent.selector = null
+
+        val inAppUrl = intent.httpUrlForInAppLoad()
+            ?: extractBrowserFallbackFromIntentUri(url)
+            ?: extractHttpUrlFromIntentSchemeUrl(url)
+        if (inAppUrl != null) {
+            logger.log(TAG, "Loading intent target in background tab: $inAppUrl")
+            return openInBackgroundTab(view, inAppUrl, requestNewTab)
+        }
+
+        val targetPackage = intent.`package`
+        if (isExternalBrowserPackage(targetPackage)) {
+            logger.log(TAG, "Blocked hand-off to external browser package: $targetPackage")
+            view.stopLoading()
+            return true
+        }
+
+        if (targetPackage != null && targetPackage != BuildConfig.APPLICATION_ID) {
+            try {
+                activity.startActivity(intent)
+                return true
+            } catch (e: ActivityNotFoundException) {
+                logger.log(TAG, "Intent target not installed: $targetPackage", e)
+            }
+        } else if (targetPackage == null) {
+            val resolved = activity.packageManager.resolveActivity(
+                intent,
+                PackageManager.MATCH_DEFAULT_ONLY,
+            )
+            val resolvedPackage = resolved?.activityInfo?.packageName
+            if (resolved != null && !isExternalBrowserPackage(resolvedPackage)) {
+                try {
+                    activity.startActivity(intent)
+                    return true
+                } catch (e: ActivityNotFoundException) {
+                    logger.log(TAG, "Resolved intent could not be started", e)
+                }
+            } else if (isExternalBrowserPackage(resolvedPackage)) {
+                logger.log(TAG, "Blocked resolved external browser: $resolvedPackage")
+            }
+        }
+
+        view.stopLoading()
+        return true
+    }
+
+    /**
+     * Recover when the WebView tried to load `intent://` and failed with ERR_UNKNOWN_URL_SCHEME.
+     */
+    fun tryRecoverFromIntentSchemeError(
+        view: WebView,
+        url: String,
+        headers: Map<String, String>,
+        requestNewTab: ((String) -> Unit)?,
+    ): Boolean {
+        if (!url.startsWith("intent:", ignoreCase = true)) {
+            return false
+        }
+        return handleIntentUrl(view, url, headers, requestNewTab)
+    }
+
+    /**
+     * Automatic ad / popup navigations open in a new background tab so the page the user was
+     * reading is not replaced.
+     */
+    private fun openInBackgroundTab(
+        view: WebView,
+        url: String,
+        requestNewTab: ((String) -> Unit)?,
+    ): Boolean {
+        view.stopLoading()
+        if (!popupTabGate.shouldAllowPopupTab(url)) {
+            logger.log(TAG, "Suppressed extra popup tab: $url")
+            return true
+        }
+        if (requestNewTab != null) {
+            popupTabGate.recordPopupTabOpened(url)
+            requestNewTab(url)
+            return true
+        }
+        logger.log(TAG, "No new-tab listener; blocked navigation: $url")
+        return true
+    }
+
+    private fun shouldOpenInBackgroundTab(
+        url: String,
+        isForMainFrame: Boolean,
+        hasGesture: Boolean,
+        currentPageUrl: String?,
+    ): Boolean {
+        if (!userPreferences.popupsEnabled) {
+            return false
+        }
+        if (!isForMainFrame || hasGesture) {
+            return false
+        }
+        if (isLikelyAdRedirectUrl(url)) {
+            return true
+        }
+        val currentHost = currentPageUrl?.toUri()?.host?.lowercase()
+        val newHost = url.toUri().host?.lowercase()
+        return currentHost != null && newHost != null && currentHost != newHost
+    }
+
+    private fun isLikelyAdRedirectUrl(url: String): Boolean {
+        val lower = url.lowercase()
+        return lower.contains("pyppo.com") ||
+            lower.contains("doubleclick.net") ||
+            lower.contains("googlesyndication.com") ||
+            lower.contains("taboola.com") ||
+            lower.contains("outbrain.com") ||
+            lower.contains("/adclick") ||
+            lower.contains("/ads?") ||
+            lower.contains("click.") && lower.contains("redirect")
+    }
+
+    private fun Intent.httpUrlForInAppLoad(): String? {
+        getStringExtra("browser_fallback_url")?.let { if (it.isHttpOrHttps()) return it }
+        dataString?.let { if (it.isHttpOrHttps()) return it }
+        data?.toString()?.let { if (it.isHttpOrHttps()) return it }
+        return null
+    }
+
+    /**
+     * Build https://host/path from `intent://host/path#Intent;scheme=https;…` when [Intent.parseUri]
+     * does not populate [Intent.data] (common on ad redirect URLs).
+     */
+    private fun extractHttpUrlFromIntentSchemeUrl(url: String): String? {
+        if (!url.startsWith("intent:", ignoreCase = true)) {
+            return null
+        }
+        val scheme = INTENT_SCHEME_PARAM.find(url)?.groupValues?.get(1)?.lowercase() ?: "https"
+        if (scheme != "http" && scheme != "https") {
+            return null
+        }
+        val hostPart = url.substringAfter("intent:", "")
+            .substringBefore('#')
+            .trim()
+        if (hostPart.isEmpty()) {
+            return null
+        }
+        val httpUrl = when {
+            hostPart.startsWith("//") -> "$scheme:$hostPart"
+            else -> "$scheme://$hostPart"
+        }
+        return httpUrl.takeIf { it.isHttpOrHttps() }
+    }
+
+    private fun extractBrowserFallbackFromIntentUri(url: String): String? {
+        val encoded = INTENT_FALLBACK_PARAM.find(url)?.groupValues?.get(1) ?: return null
+        return runCatching { Uri.decode(encoded) }.getOrNull()?.takeIf { it.isHttpOrHttps() }
+    }
+
+    private fun String.isHttpOrHttps(): Boolean =
+        URLUtil.isHttpUrl(this) || URLUtil.isHttpsUrl(this)
+
+    private fun isExternalBrowserPackage(packageName: String?): Boolean {
+        if (packageName.isNullOrBlank()) {
+            return false
+        }
+        if (packageName == BuildConfig.APPLICATION_ID) {
+            return false
+        }
+        val lower = packageName.lowercase()
+        return lower.contains("chrome") ||
+            lower.contains("firefox") ||
+            lower.contains("opera") ||
+            lower.contains("brave") ||
+            lower.contains("edge") ||
+            lower.contains("samsung") ||
+            lower.contains("sbrowser") ||
+            lower.contains("vivaldi") ||
+            lower.contains("duckduckgo") ||
+            lower == "com.android.browser" ||
+            (lower.contains("browser") && !lower.contains("minnal"))
+    }
+
+    /**
+     * Some networks use `googlechrome://navigate?url=https%3A%2F%2F…` style deep links.
+     */
+    private fun extractHttpUrlFromBrowserDeepLink(url: String): String? {
+        val lower = url.lowercase()
+        if (!lower.startsWith("googlechrome://") &&
+            !lower.startsWith("firefox://") &&
+            !lower.startsWith("microsoft-edge://")
+        ) {
+            return null
+        }
+        val target = runCatching { url.toUri().getQueryParameter("url") }.getOrNull()
+        return target?.takeIf { it.isHttpOrHttps() }
     }
 
     /**
@@ -119,25 +355,6 @@ class UrlHandler @Inject constructor(
             activity.startActivity(i)
             view.reload()
             return true
-        } else if (url.startsWith("intent://")) {
-            val intent = try {
-                Intent.parseUri(url, Intent.URI_INTENT_SCHEME)
-            } catch (ignored: URISyntaxException) {
-                null
-            }
-
-            if (intent != null) {
-                intent.addCategory(Intent.CATEGORY_BROWSABLE)
-                intent.component = null
-                intent.selector = null
-                try {
-                    activity.startActivity(intent)
-                } catch (e: ActivityNotFoundException) {
-                    logger.log(TAG, "ActivityNotFoundException")
-                }
-
-                return true
-            }
         } else if (URLUtil.isFileUrl(url) && !url.isSpecialUrl()) {
             val file = File(url.replace(FILE, ""))
 
@@ -170,6 +387,9 @@ class UrlHandler @Inject constructor(
 
     companion object {
         private const val TAG = "UrlHandler"
+
+        private val INTENT_SCHEME_PARAM = Regex("(?i)scheme=([^;\\s]+)")
+        private val INTENT_FALLBACK_PARAM = Regex("(?i)S\\.browser_fallback_url=([^;]+);")
 
         /**
          * URL path extensions for which Minnal should always intercept the navigation and

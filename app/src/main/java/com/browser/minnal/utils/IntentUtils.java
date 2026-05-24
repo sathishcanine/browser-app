@@ -35,6 +35,14 @@ public class IntentUtils {
     }
 
     public boolean startActivityForUrl(@Nullable WebView tab, @NonNull String url) {
+        // Never resolve http(s) through another browser app (Chrome, Samsung Internet, etc.).
+        // Those handlers register URL patterns with data authorities, so the old
+        // isSpecializedHandlerAvailable() check treated them as "specialized" and popped
+        // the user out of Minnal. In-app WebView / onCreateWindow should handle these.
+        if (isHttpOrHttpsUrl(url)) {
+            return false;
+        }
+
         Intent intent;
         try {
             intent = Intent.parseUri(url, Intent.URI_INTENT_SCHEME);
@@ -76,6 +84,11 @@ public class IntentUtils {
             // TODO: 6/5/17 fix case where this could throw a FileUriExposedException due to file:// urls
         }
         return false;
+    }
+
+    private static boolean isHttpOrHttpsUrl(@NonNull String url) {
+        return url.regionMatches(true, 0, "http://", 0, 7)
+            || url.regionMatches(true, 0, "https://", 0, 8);
     }
 
     /**

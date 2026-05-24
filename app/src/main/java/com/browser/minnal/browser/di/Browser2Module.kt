@@ -2,8 +2,7 @@ package com.browser.minnal.browser.di
 
 import com.browser.minnal.R
 import com.browser.minnal.adblock.AdBlocker
-import com.browser.minnal.adblock.BloomFilterAdBlocker
-import com.browser.minnal.adblock.NoOpAdBlocker
+import com.browser.minnal.adblock.UserPreferenceAdBlocker
 import com.browser.minnal.browser.BrowserContract
 import com.browser.minnal.browser.data.CookieAdministrator
 import com.browser.minnal.browser.data.DefaultCookieAdministrator
@@ -41,15 +40,8 @@ import javax.inject.Provider
 class Browser2Module {
 
     @Provides
-    fun providesAdBlocker(
-        userPreferences: UserPreferences,
-        bloomFilterAdBlocker: Provider<BloomFilterAdBlocker>,
-        noOpAdBlocker: NoOpAdBlocker
-    ): AdBlocker = if (userPreferences.adBlockEnabled) {
-        bloomFilterAdBlocker.get()
-    } else {
-        noOpAdBlocker
-    }
+    fun providesAdBlocker(userPreferenceAdBlocker: UserPreferenceAdBlocker): AdBlocker =
+        userPreferenceAdBlocker
 
     // TODO: dont force cast
     @Provides

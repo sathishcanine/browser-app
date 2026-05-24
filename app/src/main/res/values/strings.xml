@@ -204,7 +204,7 @@
         <item>@string/block_remote_frequency_monthly</item>
     </string-array>
 
-    <string name="block_source_default">Default hosts</string>
+    <string name="block_source_default">StevenBlack hosts (bundled, May 2026)</string>
     <string name="block_source_local">Local hosts file</string>
     <string name="block_source_local_description">File: %1$s</string>
     <string name="block_source_remote">Remote hosts file</string>

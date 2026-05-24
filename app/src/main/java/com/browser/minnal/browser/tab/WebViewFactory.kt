@@ -110,10 +110,6 @@ class WebViewFactory @Inject constructor(
 
 //        lightningWebClient.updatePreferences()
 //
-        val modifiesHeaders = userPreferences.doNotTrackEnabled
-            || userPreferences.saveDataEnabled
-            || userPreferences.removeIdentifyingHeadersEnabled
-
         settings.defaultTextEncodingName = userPreferences.textEncoding
 //        setColorMode(userPreferences.renderingMode)
 
@@ -147,8 +143,9 @@ class WebViewFactory @Inject constructor(
         }
 
         settings.blockNetworkImage = userPreferences.blockImagesEnabled
-        // Modifying headers causes SEGFAULTS, so disallow multi window if headers are enabled.
-        settings.setSupportMultipleWindows(userPreferences.popupsEnabled && !modifiesHeaders)
+        // Popups / target="_blank" / window.open() need multiple windows so onCreateWindow
+        // opens a new in-app tab instead of falling through to external browsers.
+        settings.setSupportMultipleWindows(userPreferences.popupsEnabled)
 
         settings.useWideViewPort = userPreferences.useWideViewPortEnabled
         settings.loadWithOverviewMode = userPreferences.overviewModeEnabled

@@ -40,7 +40,7 @@ class UserPreferences @Inject constructor(
     /**
      * True if the browser should block ads, false otherwise.
      */
-    var adBlockEnabled by preferences.booleanPreference(BLOCK_ADS, false)
+    var adBlockEnabled by preferences.booleanPreference(BLOCK_ADS, true)
 
     /**
      * True if the browser should block images from being loaded, false otherwise.
