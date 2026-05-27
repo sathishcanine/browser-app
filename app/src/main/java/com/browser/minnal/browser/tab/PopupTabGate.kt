@@ -12,11 +12,25 @@ class PopupTabGate @Inject constructor() {
 
     private var openedSinceGesture = 0
     private val recentUrls = LinkedHashSet<String>()
+    private var lastUserGestureAtMs = 0L
 
     @Synchronized
     fun onUserGesture() {
         openedSinceGesture = 0
         recentUrls.clear()
+        lastUserGestureAtMs = System.currentTimeMillis()
+    }
+
+    /**
+     * [WebResourceRequest.hasGesture] is often false for link taps; WebView touch events are
+     * tracked separately via [onUserGesture].
+     */
+    @Synchronized
+    fun hadRecentUserGesture(): Boolean {
+        if (lastUserGestureAtMs <= 0L) {
+            return false
+        }
+        return System.currentTimeMillis() - lastUserGestureAtMs <= USER_GESTURE_WINDOW_MS
     }
 
     @Synchronized
@@ -55,5 +69,6 @@ class PopupTabGate @Inject constructor() {
     companion object {
         private const val MAX_POPUP_TABS_PER_GESTURE = 1
         private const val MAX_TRACKED_URLS = 8
+        private const val USER_GESTURE_WINDOW_MS = 3_000L
     }
 }

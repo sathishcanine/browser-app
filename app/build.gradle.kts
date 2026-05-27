@@ -76,6 +76,11 @@ android {
             )
             buildConfigField(
                 "String",
+                "DOWNLOADS_NATIVE_AD_UNIT_ID",
+                "\"ca-app-pub-3940256099942544/2247696110\""
+            )
+            buildConfigField(
+                "String",
                 "REWARDED_AD_ONE",
                 "\"ca-app-pub-3940256099942544/5224354917\""
             )
@@ -83,6 +88,11 @@ android {
                 "String",
                 "INTERSTITIAL_AD_ONE",
                 "\"ca-app-pub-3940256099942544/1033173712\""
+            )
+            buildConfigField(
+                "String",
+                "APP_OPEN_AD_UNIT_ID",
+                "\"ca-app-pub-3940256099942544/9257395921\""
             )
         }
 
@@ -104,6 +114,11 @@ android {
             )
             buildConfigField(
                 "String",
+                "DOWNLOADS_NATIVE_AD_UNIT_ID",
+                "\"ca-app-pub-8723888126390754/1955988184\""
+            )
+            buildConfigField(
+                "String",
                 "REWARDED_AD_ONE",
                 "\"ca-app-pub-8723888126390754/1021424890\""
             )
@@ -111,6 +126,11 @@ android {
                 "String",
                 "INTERSTITIAL_AD_ONE",
                 "\"ca-app-pub-8723888126390754/4960669900\""
+            )
+            buildConfigField(
+                "String",
+                "APP_OPEN_AD_UNIT_ID",
+                "\"ca-app-pub-8723888126390754/7098983744\""
             )
 
             ndk {
@@ -129,7 +149,7 @@ android {
             dimension = "capabilities"
             buildConfigField("boolean", "FULL_VERSION", "Boolean.parseBoolean(\"true\")")
             applicationId = "com.browser.minnal"
-            versionCode = 9
+            versionCode = 10
         }
 
         if (!isCi) {
@@ -137,7 +157,7 @@ android {
                 dimension = "capabilities"
                 buildConfigField("boolean", "FULL_VERSION", "Boolean.parseBoolean(\"true\")")
                 applicationId = "com.browser.minnal"
-                versionCode = 9
+                versionCode = 10
             }
         }
     }
@@ -174,6 +194,7 @@ dependencies {
     implementation("androidx.drawerlayout:drawerlayout:1.2.0")
     implementation("androidx.fragment:fragment:1.8.9")
     implementation("androidx.lifecycle:lifecycle-common:2.10.0")
+    implementation("androidx.lifecycle:lifecycle-process:2.10.0")
     implementation("androidx.palette:palette:1.0.0")
     implementation("androidx.preference:preference:1.2.1")
     implementation("androidx.recyclerview:recyclerview:1.4.0")

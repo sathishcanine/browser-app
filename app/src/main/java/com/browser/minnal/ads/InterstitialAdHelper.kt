@@ -26,7 +26,7 @@ class InterstitialAdHelper @Inject constructor(
     @Volatile
     private var suppressCount = 0
 
-    fun isSuppressed(): Boolean = suppressCount > 0
+    fun isSuppressed(): Boolean = suppressCount > 0 || !ENABLED
 
     fun beginSuppress() {
         suppressCount++
@@ -37,7 +37,7 @@ class InterstitialAdHelper @Inject constructor(
     }
 
     fun preload(activity: FragmentActivity) {
-        if (interstitialAd != null || isLoading || isSuppressed()) {
+        if (!ENABLED || interstitialAd != null || isLoading || isSuppressed()) {
             return
         }
         loadAd(activity)
@@ -50,7 +50,7 @@ class InterstitialAdHelper @Inject constructor(
         activity: FragmentActivity,
         onDismissed: () -> Unit,
     ): Boolean {
-        if (isSuppressed() || activity.isFinishing || activity.isDestroyed) {
+        if (!ENABLED || isSuppressed() || activity.isFinishing || activity.isDestroyed) {
             return false
         }
         val ad = interstitialAd ?: run {
@@ -115,5 +115,8 @@ class InterstitialAdHelper @Inject constructor(
 
     companion object {
         private const val TAG = "InterstitialAdHelper"
+
+        /** Set to true to re-enable timed full-screen interstitials. */
+        const val ENABLED = false
     }
 }

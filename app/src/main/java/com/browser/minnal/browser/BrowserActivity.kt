@@ -26,7 +26,10 @@ import com.browser.minnal.browser.theme.ThemeProvider
 import com.browser.minnal.browser.ui.BookmarkConfiguration
 import com.browser.minnal.browser.ui.TabConfiguration
 import com.browser.minnal.browser.ui.UiConfiguration
+import com.browser.minnal.browser.menu.MenuSelection
 import com.browser.minnal.browser.view.ViewDelegate
+import com.browser.minnal.view.RadialFabMenu
+import com.browser.minnal.view.RadialFabMenuItem
 import com.browser.minnal.browser.view.delegates.BottomTabViewDelegate
 import com.browser.minnal.browser.view.delegates.DesktopTabViewDelegate
 import com.browser.minnal.browser.view.delegates.DrawerTabViewDelegate
@@ -41,13 +44,13 @@ import com.browser.minnal.databinding.BrowserActivityBottomBinding
 import com.browser.minnal.databinding.BrowserActivityDesktopBinding
 import com.browser.minnal.databinding.BrowserActivityDrawerBinding
 import com.browser.minnal.databinding.BrowserBottomTabsBinding
-import com.browser.minnal.databinding.BookmarkNativeAdStripBinding
 import com.browser.minnal.dialog.BrowserDialog
 import com.browser.minnal.dialog.DialogItem
 import com.browser.minnal.dialog.LightningDialogBuilder
 import com.browser.minnal.extensions.color
 import com.browser.minnal.extensions.drawable
 import com.browser.minnal.extensions.resizeAndShow
+import com.browser.minnal.extensions.snackbar
 import com.browser.minnal.extensions.takeIfInstance
 import com.browser.minnal.extensions.tint
 import com.browser.minnal.search.SuggestionsAdapter
@@ -80,6 +83,7 @@ import androidx.annotation.MenuRes
 import androidx.appcompat.app.AlertDialog
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.view.isVisible
+import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
@@ -98,6 +102,7 @@ import javax.inject.Inject
 abstract class BrowserActivity : ThemableBrowserActivity() {
 
     private lateinit var binding: ViewDelegate
+    private lateinit var radialFabMenu: RadialFabMenu
     private lateinit var tabsAdapter: ListAdapter<TabViewState, TabViewHolder>
     private lateinit var bookmarksAdapter: BookmarkRecyclerViewAdapter
     private var activeRecyclerView: RecyclerView? = null
@@ -113,11 +118,7 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
     private var customView: View? = null
 
     private var bookmarkNativeAdController: BookmarkNativeAdController? = null
-    private var appOpenNativeAdController: BookmarkNativeAdController? = null
-
-    private var shouldOfferAppOpenNativeAdOnNextForeground = true
-    private var pendingAppOpenNativeAd = false
-    private var lastBookmarkNativeAdStripVisible = false
+    private var downloadsNativeAdController: BookmarkNativeAdController? = null
 
     private var interstitialAccumulatedActiveMs = 0L
 
@@ -197,14 +198,6 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (savedInstanceState != null) {
-            shouldOfferAppOpenNativeAdOnNextForeground = savedInstanceState.getBoolean(
-                STATE_SHOULD_OFFER_APP_OPEN_NATIVE_AD,
-                false
-            )
-            pendingAppOpenNativeAd = savedInstanceState.getBoolean(
-                STATE_PENDING_APP_OPEN_NATIVE_AD,
-                false
-            )
             interstitialAccumulatedActiveMs = savedInstanceState.getLong(
                 STATE_INTERSTITIAL_ACCUMULATED_MS,
                 0L,
@@ -368,20 +361,14 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         binding.bookmarkListView.layoutManager = LinearLayoutManager(this)
 
         if (!isIncognito()) {
-            bookmarkNativeAdController = BookmarkNativeAdController(this, binding.bookmarkNativeAdStrip)
-            val bookmarkStripRoot = binding.bookmarkNativeAdStrip.root
-            val parent = bookmarkStripRoot.parent as? ViewGroup
-            if (parent != null) {
-                val insertIndex = parent.indexOfChild(bookmarkStripRoot)
-                val appOpenStrip = BookmarkNativeAdStripBinding.inflate(layoutInflater, parent, false)
-                parent.addView(appOpenStrip.root, insertIndex)
-                appOpenNativeAdController = BookmarkNativeAdController(this, appOpenStrip).apply {
-                    onUserDismissedStrip = {
-                        pendingAppOpenNativeAd = false
-                        syncAppOpenNativeAd()
-                    }
-                }
-            }
+            bookmarkNativeAdController = BookmarkNativeAdController.forBookmarks(
+                this,
+                binding.bookmarkNativeAdStrip,
+            )
+            downloadsNativeAdController = BookmarkNativeAdController.forDownloads(
+                this,
+                binding.downloadsNativeAdStrip,
+            )
         }
 
         presenter.onViewAttached(BrowserStateAdapter(this))
@@ -439,12 +426,157 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         tabPager.longPressListener = presenter::onPageLongPress
 
         onBackPressedDispatcher.addCallback {
-            presenter.onNavigateBack()
+            if (::radialFabMenu.isInitialized && radialFabMenu.isMenuExpanded) {
+                radialFabMenu.collapse()
+            } else {
+                presenter.onNavigateBack()
+            }
         }
 
         if (savedInstanceState == null) {
             scheduleForceUpdateRemoteConfigCheck()
         }
+    }
+
+    private fun setupRadialFabMenu() {
+        radialFabMenu = RadialFabMenu(this)
+        val layoutParams = CoordinatorLayout.LayoutParams(
+            CoordinatorLayout.LayoutParams.MATCH_PARENT,
+            CoordinatorLayout.LayoutParams.MATCH_PARENT,
+        )
+        binding.root.addView(radialFabMenu, layoutParams)
+        binding.root.clipChildren = false
+        binding.root.clipToPadding = false
+        binding.root.post { updateRadialFabBottomInset() }
+        binding.uiLayout.viewTreeObserver.addOnGlobalLayoutListener {
+            if (::radialFabMenu.isInitialized) {
+                updateRadialFabBottomInset()
+            }
+        }
+        radialFabMenu.setMenuItems(buildRadialFabMenuItems())
+    }
+
+    private fun buildRadialFabMenuItems(): List<RadialFabMenuItem> {
+        return listOf(
+            RadialFabMenuItem(
+                iconRes = R.drawable.ic_action_home,
+                label = getString(R.string.fab_menu_home),
+                contentDescription = getString(R.string.fab_menu_home),
+                onClick = { presenter.onHomeClick() },
+            ),
+            RadialFabMenuItem(
+                iconRes = R.drawable.ic_action_tabs,
+                label = getString(R.string.fab_menu_close_all_tabs),
+                contentDescription = getString(R.string.fab_menu_close_all_tabs),
+                onClick = { showCloseAllTabsDialog() },
+            ),
+            RadialFabMenuItem(
+                iconRes = R.drawable.ic_history,
+                label = getString(R.string.fab_menu_clear_history),
+                contentDescription = getString(R.string.fab_menu_clear_history),
+                onClick = { showClearHistoryDialog() },
+            ),
+            RadialFabMenuItem(
+                iconRes = R.drawable.ic_action_downloads,
+                label = getString(R.string.fab_menu_downloads),
+                contentDescription = getString(R.string.fab_menu_downloads),
+                onClick = { presenter.onMenuClick(MenuSelection.DOWNLOADS) },
+            ),
+            addressBarToggleMenuItem(),
+        )
+    }
+
+    private fun addressBarToggleMenuItem(): RadialFabMenuItem {
+        return if (userPreferences.tabConfiguration == TabConfiguration.DRAWER_BOTTOM) {
+            RadialFabMenuItem(
+                iconRes = R.drawable.ic_action_toolbar_top,
+                label = getString(R.string.fab_menu_move_address_bar_top),
+                contentDescription = getString(R.string.fab_menu_move_address_bar_top),
+                onClick = { toggleAddressBarPosition(toBottom = false) },
+            )
+        } else {
+            RadialFabMenuItem(
+                iconRes = R.drawable.ic_action_toolbar_bottom,
+                label = getString(R.string.fab_menu_move_address_bar_bottom),
+                contentDescription = getString(R.string.fab_menu_move_address_bar_bottom),
+                onClick = { toggleAddressBarPosition(toBottom = true) },
+            )
+        }
+    }
+
+    private fun toggleAddressBarPosition(toBottom: Boolean) {
+        userPreferences.tabConfiguration = if (toBottom) {
+            TabConfiguration.DRAWER_BOTTOM
+        } else {
+            TabConfiguration.DRAWER_SIDE
+        }
+        restart()
+    }
+
+    private fun updateRadialFabBottomInset() {
+        val inset = if (userPreferences.tabConfiguration == TabConfiguration.DRAWER_BOTTOM) {
+            computeBottomToolbarInset()
+        } else {
+            resources.getDimensionPixelSize(R.dimen.radial_fab_extra_bottom_inset)
+        }
+        radialFabMenu.setFabBottomInset(inset)
+    }
+
+    private fun computeBottomToolbarInset(): Int {
+        val rootLocation = IntArray(2)
+        binding.root.getLocationInWindow(rootLocation)
+        val rootBottom = rootLocation[1] + binding.root.height
+
+        val chromeViews = buildList {
+            add(binding.toolbarLayout)
+            if (binding.findBar.isVisible) {
+                add(binding.findBar)
+            }
+            if (binding.bookmarkNativeAdStrip.root.isVisible) {
+                add(binding.bookmarkNativeAdStrip.root)
+            }
+            if (binding.downloadsNativeAdStrip.root.isVisible) {
+                add(binding.downloadsNativeAdStrip.root)
+            }
+        }
+
+        val chromeTop = chromeViews.minOf { view ->
+            val location = IntArray(2)
+            view.getLocationInWindow(location)
+            location[1]
+        }
+
+        return (rootBottom - chromeTop)
+            .coerceAtLeast(resources.getDimensionPixelSize(R.dimen.toolbar_height_portrait)) +
+            resources.getDimensionPixelSize(R.dimen.radial_fab_extra_bottom_inset)
+    }
+
+    private fun showCloseAllTabsDialog() {
+        BrowserDialog.showPositiveNegativeDialog(
+            activity = this,
+            title = R.string.fab_menu_close_all_tabs,
+            message = R.string.dialog_close_all_tabs,
+            positiveButton = DialogItem(title = R.string.action_yes) {
+                presenter.closeAllTabs()
+            },
+            negativeButton = DialogItem(title = R.string.action_no) {},
+            onCancel = {},
+        )
+    }
+
+    private fun showClearHistoryDialog() {
+        BrowserDialog.showPositiveNegativeDialog(
+            activity = this,
+            title = R.string.fab_menu_clear_history,
+            message = R.string.dialog_history,
+            positiveButton = DialogItem(title = R.string.action_yes) {
+                presenter.clearHistory(this) {
+                    snackbar(R.string.message_clear_history)
+                }
+            },
+            negativeButton = DialogItem(title = R.string.action_no) {},
+            onCancel = {},
+        )
     }
 
     /**
@@ -531,18 +663,6 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         }
     }
 
-    override fun onStart() {
-        super.onStart()
-        if (isIncognito()) {
-            appOpenNativeAdController?.onPresenterShowBookmarkNativeAd(false)
-            return
-        }
-        if (shouldOfferAppOpenNativeAdOnNextForeground) {
-            shouldOfferAppOpenNativeAdOnNextForeground = false
-            pendingAppOpenNativeAd = true
-        }
-        binding.root.post { syncAppOpenNativeAd() }
-    }
 
     override fun onResume() {
         super.onResume()
@@ -553,17 +673,9 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         }
     }
 
-    override fun onStop() {
-        if (!isChangingConfigurations && !isIncognito()) {
-            shouldOfferAppOpenNativeAdOnNextForeground = true
-        }
-        super.onStop()
-    }
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        outState.putBoolean(STATE_SHOULD_OFFER_APP_OPEN_NATIVE_AD, shouldOfferAppOpenNativeAdOnNextForeground)
-        outState.putBoolean(STATE_PENDING_APP_OPEN_NATIVE_AD, pendingAppOpenNativeAd)
         outState.putLong(STATE_INTERSTITIAL_ACCUMULATED_MS, interstitialAccumulatedActiveMs)
     }
 
@@ -584,8 +696,8 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         forceUpdateDialog = null
         bookmarkNativeAdController?.destroy()
         bookmarkNativeAdController = null
-        appOpenNativeAdController?.destroy()
-        appOpenNativeAdController = null
+        downloadsNativeAdController?.destroy()
+        downloadsNativeAdController = null
         presenter.onViewDetached()
         super.onDestroy()
     }
@@ -607,7 +719,24 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         return super.onCreateOptionsMenu(menu)
     }
 
+    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
+        menu.findItem(R.id.action_toggle_address_bar)?.title = getString(
+            if (userPreferences.tabConfiguration == TabConfiguration.DRAWER_BOTTOM) {
+                R.string.menu_move_url_bar_to_top
+            } else {
+                R.string.menu_move_url_bar_to_bottom
+            },
+        )
+        return super.onPrepareOptionsMenu(menu)
+    }
+
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        if (item.itemId == R.id.action_toggle_address_bar) {
+            toggleAddressBarPosition(
+                toBottom = userPreferences.tabConfiguration != TabConfiguration.DRAWER_BOTTOM,
+            )
+            return true
+        }
         return menuItemAdapter.adaptMenuItem(item)?.let(presenter::onMenuClick)?.let { true }
             ?: super.onOptionsItemSelected(item)
     }
@@ -673,12 +802,9 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         }
         viewState.showBookmarkNativeAdStrip?.let { show ->
             bookmarkNativeAdController?.onPresenterShowBookmarkNativeAd(show)
-            lastBookmarkNativeAdStripVisible = show
-            // One native placement on the start page: bookmark strip OR app-return strip, not both.
-            if (show) {
-                pendingAppOpenNativeAd = false
-            }
-            syncAppOpenNativeAd()
+        }
+        viewState.showDownloadsNativeAdStrip?.let { show ->
+            downloadsNativeAdController?.onPresenterShowBookmarkNativeAd(show)
         }
     }
 
@@ -1087,18 +1213,6 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         }
     }
 
-    private fun syncAppOpenNativeAd() {
-        if (isIncognito()) {
-            appOpenNativeAdController?.onPresenterShowBookmarkNativeAd(false)
-            return
-        }
-        if (lastBookmarkNativeAdStripVisible) {
-            appOpenNativeAdController?.onPresenterShowBookmarkNativeAd(false)
-            return
-        }
-        appOpenNativeAdController?.onPresenterShowBookmarkNativeAd(pendingAppOpenNativeAd)
-    }
-
     private fun maybeShowDefaultBrowserPrompt() {
         if (isIncognito()) return
         if (userPreferences.suppressDefaultBrowserPrompt) return
@@ -1141,8 +1255,6 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
     private companion object {
         private const val DEFAULT_BROWSER_PROMPT_MIN_INTERVAL_MS = 24L * 60 * 60 * 1000
         private const val DEFAULT_BROWSER_SNOOZE_MS = 24L * 60 * 60 * 1000
-        private const val STATE_SHOULD_OFFER_APP_OPEN_NATIVE_AD = "should_offer_app_open_native_ad"
-        private const val STATE_PENDING_APP_OPEN_NATIVE_AD = "pending_app_open_native_ad"
         private const val STATE_INTERSTITIAL_ACCUMULATED_MS = "interstitial_accumulated_active_ms"
     }
 }

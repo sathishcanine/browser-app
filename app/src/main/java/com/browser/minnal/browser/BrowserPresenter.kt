@@ -50,6 +50,8 @@ import com.browser.minnal.utils.smartUrlFilter
 import com.browser.minnal.utils.value
 import androidx.activity.result.ActivityResult
 import androidx.core.net.toUri
+import com.browser.minnal.utils.WebUtils
+import io.reactivex.rxjava3.core.Completable
 import io.reactivex.rxjava3.core.Maybe
 import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.core.Scheduler
@@ -110,7 +112,8 @@ class BrowserPresenter @Inject constructor(
         isBookmarkEnabled = true,
         isRootFolder = true,
         findInPage = "",
-        showBookmarkNativeAdStrip = false
+        showBookmarkNativeAdStrip = false,
+        showDownloadsNativeAdStrip = false
     )
     private var tabListState: List<TabViewState> = emptyList()
     private var currentTab: TabModel? = null
@@ -244,7 +247,8 @@ class BrowserPresenter @Inject constructor(
                     sslState = SslState.None,
                     progress = 100,
                     findInPage = "",
-                    showBookmarkNativeAdStrip = false
+                    showBookmarkNativeAdStrip = false,
+                    showDownloadsNativeAdStrip = false
                 )
             )
             view.updateTabs(tabListState.map { it.copy(isSelected = false) })
@@ -288,7 +292,8 @@ class BrowserPresenter @Inject constructor(
                 isBookmarked = isBookmark,
                 isBookmarkEnabled = !isSpecialUrl,
                 findInPage = tab.findQuery.orEmpty(),
-                showBookmarkNativeAdStrip = computeShowBookmarkNativeAdStrip(url)
+                showBookmarkNativeAdStrip = computeShowBookmarkNativeAdStrip(url),
+                showDownloadsNativeAdStrip = computeShowDownloadsNativeAdStrip(url)
             )
         }.observeOn(mainScheduler)
             .subscribe { view.updateState(it) }
@@ -679,11 +684,27 @@ class BrowserPresenter @Inject constructor(
     private fun computeShowBookmarkNativeAdStrip(url: String): Boolean =
         url.isBookmarkUrl() && !incognitoMode && !suppressBookmarkNativeAdAfterHistoryBack
 
+    private fun computeShowDownloadsNativeAdStrip(url: String): Boolean =
+        url.isDownloadsUrl() && !incognitoMode
+
     /**
      * Call when the user clicks on the home button.
      */
     fun onHomeClick() {
         loadHomePageWithoutBookmarkNativeAdStrip()
+    }
+
+    fun closeAllTabs() {
+        onCloseBrowserEvent(0, BrowserContract.CloseTabEvent.CLOSE_ALL)
+    }
+
+    fun clearHistory(context: android.content.Context, onComplete: () -> Unit) {
+        compositeDisposable += Completable.fromAction {
+            WebUtils.clearHistory(context, historyRepository, databaseScheduler)
+        }
+            .subscribeOn(databaseScheduler)
+            .observeOn(mainScheduler)
+            .subscribeBy(onComplete = onComplete)
     }
 
     /**

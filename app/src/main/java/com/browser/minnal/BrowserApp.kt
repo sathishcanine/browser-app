@@ -17,6 +17,7 @@ import android.os.Build
 import android.os.StrictMode
 import android.util.Log
 import android.webkit.WebView
+import com.browser.minnal.ads.AppOpenAdManager
 import com.google.android.gms.ads.MobileAds
 import com.google.firebase.FirebaseApp
 import com.google.firebase.analytics.FirebaseAnalytics
@@ -55,6 +56,9 @@ class BrowserApp : Application(), Configuration.Provider {
 
     @Inject
     internal lateinit var cleanup: Cleanup
+
+    @Inject
+    internal lateinit var appOpenAdManager: AppOpenAdManager
 
     lateinit var applicationComponent: AppComponent
 
@@ -144,6 +148,8 @@ class BrowserApp : Application(), Configuration.Provider {
             .buildInfo(createBuildInfo())
             .build()
         injector.inject(this)
+
+        appOpenAdManager.start()
 
         Single.fromCallable(bookmarkModel::count)
             .filter { it == 0L }

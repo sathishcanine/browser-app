@@ -76,7 +76,7 @@ class UrlHandler @Inject constructor(
         // Keep http(s) navigations inside Minnal — do not hand off to Chrome via intents.
         if (URLUtil.isHttpUrl(url) || URLUtil.isHttpsUrl(url)) {
             if (shouldOpenInBackgroundTab(url, isForMainFrame, hasGesture, currentPageUrl)) {
-                return openInBackgroundTab(view, url, requestNewTab)
+                return openInBackgroundTab(view, url, headers, requestNewTab)
             }
             return continueLoadingUrl(view, url, headers)
         }
@@ -87,7 +87,7 @@ class UrlHandler @Inject constructor(
 
         val browserDeepLink = extractHttpUrlFromBrowserDeepLink(url)
         if (browserDeepLink != null) {
-            return openInBackgroundTab(view, browserDeepLink, requestNewTab)
+            return openInBackgroundTab(view, browserDeepLink, headers, requestNewTab)
         }
 
         return if (isMailOrIntent(url, view) || intentUtils.startActivityForUrl(view, url)) {
@@ -126,7 +126,7 @@ class UrlHandler @Inject constructor(
             ?: extractHttpUrlFromIntentSchemeUrl(url)
         if (inAppUrl != null) {
             logger.log(TAG, "Loading intent target in background tab: $inAppUrl")
-            return openInBackgroundTab(view, inAppUrl, requestNewTab)
+            return openInBackgroundTab(view, inAppUrl, headers, requestNewTab)
         }
 
         val targetPackage = intent.`package`
@@ -187,20 +187,21 @@ class UrlHandler @Inject constructor(
     private fun openInBackgroundTab(
         view: WebView,
         url: String,
+        headers: Map<String, String>,
         requestNewTab: ((String) -> Unit)?,
     ): Boolean {
         view.stopLoading()
         if (!popupTabGate.shouldAllowPopupTab(url)) {
-            logger.log(TAG, "Suppressed extra popup tab: $url")
-            return true
+            logger.log(TAG, "Suppressed extra popup tab, loading in current tab: $url")
+            return continueLoadingUrl(view, url, headers)
         }
         if (requestNewTab != null) {
             popupTabGate.recordPopupTabOpened(url)
             requestNewTab(url)
             return true
         }
-        logger.log(TAG, "No new-tab listener; blocked navigation: $url")
-        return true
+        logger.log(TAG, "No new-tab listener; loading in current tab: $url")
+        return continueLoadingUrl(view, url, headers)
     }
 
     private fun shouldOpenInBackgroundTab(
@@ -212,7 +213,11 @@ class UrlHandler @Inject constructor(
         if (!userPreferences.popupsEnabled) {
             return false
         }
-        if (!isForMainFrame || hasGesture) {
+        if (!isForMainFrame) {
+            return false
+        }
+        // Link taps often report hasGesture=false; rely on WebView touch tracking too.
+        if (hasGesture || popupTabGate.hadRecentUserGesture()) {
             return false
         }
         if (isLikelyAdRedirectUrl(url)) {

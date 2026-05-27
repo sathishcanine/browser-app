@@ -34,7 +34,8 @@ class BrowserStateAdapter(private val browserActivity: BrowserActivity) : Browse
             isBookmarkEnabled,
             isRootFolder,
             findInPage,
-            showBookmarkNativeAdStrip
+            showBookmarkNativeAdStrip,
+            showDownloadsNativeAdStrip
         ) = viewState
 
         browserActivity.renderState(
@@ -54,6 +55,9 @@ class BrowserStateAdapter(private val browserActivity: BrowserActivity) : Browse
                 findInPage = findInPage.takeIf { it != currentState?.findInPage },
                 showBookmarkNativeAdStrip = showBookmarkNativeAdStrip.takeIf {
                     it != currentState?.showBookmarkNativeAdStrip
+                },
+                showDownloadsNativeAdStrip = showDownloadsNativeAdStrip.takeIf {
+                    it != currentState?.showDownloadsNativeAdStrip
                 }
             )
         )

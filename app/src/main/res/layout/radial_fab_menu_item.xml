@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:gravity="center_horizontal"
+    android:orientation="vertical"
+    android:padding="4dp">
+
+    <FrameLayout
+        android:id="@+id/radial_fab_item_icon_container"
+        android:layout_width="@dimen/radial_fab_item_size"
+        android:layout_height="@dimen/radial_fab_item_size"
+        android:background="@drawable/radial_fab_item_background"
+        android:elevation="4dp">
+
+        <ImageView
+            android:id="@+id/radial_fab_item_icon"
+            android:layout_width="@dimen/radial_fab_item_icon"
+            android:layout_height="@dimen/radial_fab_item_icon"
+            android:layout_gravity="center"
+            android:importantForAccessibility="no"
+            tools:src="@drawable/ic_action_plus" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/radial_fab_item_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:ellipsize="end"
+        android:fontFamily="sans-serif-medium"
+        android:gravity="center"
+        android:maxWidth="88dp"
+        android:maxLines="2"
+        android:textColor="@color/black"
+        android:textSize="11sp"
+        tools:text="Home" />
+
+</LinearLayout>

@@ -48,6 +48,9 @@
         android:id="@+id/action_add_bookmark"
         android:title="@string/action_add_bookmark"/>
     <item
+        android:id="@+id/action_toggle_address_bar"
+        android:title="@string/menu_move_url_bar_to_top"/>
+    <item
         android:id="@+id/action_settings"
         android:title="@string/settings"/>
 

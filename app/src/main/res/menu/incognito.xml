@@ -19,5 +19,8 @@
     <item
         android:id="@+id/action_bookmarks"
         android:title="@string/action_bookmarks"/>
+    <item
+        android:id="@+id/action_toggle_address_bar"
+        android:title="@string/menu_move_url_bar_to_top"/>
     
 </menu>

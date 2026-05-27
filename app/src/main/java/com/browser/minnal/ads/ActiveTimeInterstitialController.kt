@@ -33,6 +33,9 @@ class ActiveTimeInterstitialController @Inject constructor(
     }
 
     fun onBrowserResumed(activity: FragmentActivity, canShow: () -> Boolean) {
+        if (!InterstitialAdHelper.ENABLED) {
+            return
+        }
         activityRef = WeakReference(activity)
         canShowCheck = canShow
         if (resumedAtElapsedMs != 0L) {

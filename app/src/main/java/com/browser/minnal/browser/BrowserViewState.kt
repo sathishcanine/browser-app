@@ -24,6 +24,7 @@ import com.browser.minnal.utils.Option
  * child folder.
  * @param findInPage The text that we are searching the page for.
  * @param showBookmarkNativeAdStrip True when the bookmarks start page is shown (non-incognito) so the app can show the native ad strip.
+ * @param showDownloadsNativeAdStrip True when the in-app downloads page is shown (non-incognito).
  */
 data class BrowserViewState(
     // search bar
@@ -47,8 +48,9 @@ data class BrowserViewState(
     // find
     val findInPage: String,
 
-    val showBookmarkNativeAdStrip: Boolean
+    val showBookmarkNativeAdStrip: Boolean,
 
+    val showDownloadsNativeAdStrip: Boolean
 )
 
 /**
@@ -76,5 +78,7 @@ data class PartialBrowserViewState(
     // find
     val findInPage: String?,
 
-    val showBookmarkNativeAdStrip: Boolean?
+    val showBookmarkNativeAdStrip: Boolean?,
+
+    val showDownloadsNativeAdStrip: Boolean?
 )

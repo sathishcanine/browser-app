@@ -3,6 +3,7 @@ package com.browser.minnal.ads
 import com.browser.minnal.BuildConfig
 import com.browser.minnal.R
 import com.browser.minnal.databinding.BookmarkNativeAdStripBinding
+import com.browser.minnal.databinding.DownloadsNativeAdStripBinding
 import com.browser.minnal.databinding.NativeAdBookmarksBinding
 import com.google.android.gms.ads.AdListener
 import com.google.android.gms.ads.AdLoader
@@ -11,16 +12,23 @@ import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdOptions
 import com.google.android.gms.ads.nativead.NativeAdView
+import android.view.View
+import android.widget.FrameLayout
+import android.widget.ImageButton
 import androidx.core.view.isVisible
 import androidx.fragment.app.FragmentActivity
 
 /**
- * Native advanced ad strip (expand/collapse/close). Used for the bookmarks start page and for
- * an extra strip shown when the user returns to the app on a non-bookmark tab.
+ * Native advanced ad strip (expand/collapse, optional close). Used for the bookmarks start page,
+ * downloads page, and an extra strip when the user returns to the app on a non-bookmark tab.
  */
-class BookmarkNativeAdController(
+class BookmarkNativeAdController private constructor(
     private val activity: FragmentActivity,
-    stripBinding: BookmarkNativeAdStripBinding,
+    private val stripRoot: View,
+    private val expandToggle: ImageButton,
+    private val closeButton: ImageButton?,
+    private val adContainer: FrameLayout,
+    private val adUnitId: String,
 ) {
 
     /**
@@ -28,15 +36,10 @@ class BookmarkNativeAdController(
      */
     var onUserDismissedStrip: (() -> Unit)? = null
 
-    private val stripRoot = stripBinding.root
-    private val expandToggle = stripBinding.nativeAdExpandToggle
-    private val closeButton = stripBinding.nativeAdClose
-    private val adContainer = stripBinding.nativeAdContainer
-
     private var nativeAdViewBinding: NativeAdBookmarksBinding? = null
     private var loadedNativeAd: NativeAd? = null
     private var expanded = true
-    private var dismissedForThisBookmarkVisit = false
+    private var dismissedForThisVisit = false
     private var presenterWantsVisible = false
     private var loadAttemptedForThisVisit = false
 
@@ -45,12 +48,14 @@ class BookmarkNativeAdController(
             expanded = !expanded
             updateExpandedUi()
         }
-        closeButton.setOnClickListener {
-            onUserDismissedStrip?.invoke()
-            dismissedForThisBookmarkVisit = true
-            stripRoot.isVisible = false
-            adContainer.isVisible = false
-            destroyLoadedAd()
+        if (closeButton != null) {
+            closeButton.setOnClickListener {
+                onUserDismissedStrip?.invoke()
+                dismissedForThisVisit = true
+                stripRoot.isVisible = false
+                adContainer.isVisible = false
+                destroyLoadedAd()
+            }
         }
         updateExpandedUi()
     }
@@ -58,7 +63,7 @@ class BookmarkNativeAdController(
     fun onPresenterShowBookmarkNativeAd(show: Boolean) {
         presenterWantsVisible = show
         if (!show) {
-            dismissedForThisBookmarkVisit = false
+            dismissedForThisVisit = false
             loadAttemptedForThisVisit = false
             stripRoot.isVisible = false
             adContainer.isVisible = false
@@ -67,7 +72,7 @@ class BookmarkNativeAdController(
             destroyLoadedAd()
             return
         }
-        if (dismissedForThisBookmarkVisit) {
+        if (dismissedForThisVisit) {
             stripRoot.isVisible = false
             return
         }
@@ -89,20 +94,20 @@ class BookmarkNativeAdController(
         } else if (loadedNativeAd != null) {
             adContainer.isVisible = true
         }
-        if (expanded && presenterWantsVisible && !dismissedForThisBookmarkVisit && !loadAttemptedForThisVisit) {
+        if (expanded && presenterWantsVisible && !dismissedForThisVisit && !loadAttemptedForThisVisit) {
             loadNativeAd()
         }
     }
 
     private fun loadNativeAd() {
-        if (loadAttemptedForThisVisit || !presenterWantsVisible || dismissedForThisBookmarkVisit) {
+        if (loadAttemptedForThisVisit || !presenterWantsVisible || dismissedForThisVisit) {
             return
         }
         loadAttemptedForThisVisit = true
         ensureNativeAdViewInflated()
         val adView = nativeAdViewBinding?.root as? NativeAdView ?: return
 
-        AdLoader.Builder(activity, BuildConfig.BOOKMARK_NATIVE_AD_UNIT_ID)
+        AdLoader.Builder(activity, adUnitId)
             .forNativeAd { ad ->
                 loadedNativeAd?.destroy()
                 loadedNativeAd = ad
@@ -184,5 +189,31 @@ class BookmarkNativeAdController(
 
     fun destroy() {
         destroyLoadedAd()
+    }
+
+    companion object {
+        fun forBookmarks(
+            activity: FragmentActivity,
+            stripBinding: BookmarkNativeAdStripBinding,
+        ): BookmarkNativeAdController = BookmarkNativeAdController(
+            activity = activity,
+            stripRoot = stripBinding.root,
+            expandToggle = stripBinding.nativeAdExpandToggle,
+            closeButton = stripBinding.nativeAdClose,
+            adContainer = stripBinding.nativeAdContainer,
+            adUnitId = BuildConfig.BOOKMARK_NATIVE_AD_UNIT_ID,
+        )
+
+        fun forDownloads(
+            activity: FragmentActivity,
+            stripBinding: DownloadsNativeAdStripBinding,
+        ): BookmarkNativeAdController = BookmarkNativeAdController(
+            activity = activity,
+            stripRoot = stripBinding.root,
+            expandToggle = stripBinding.nativeAdExpandToggle,
+            closeButton = null,
+            adContainer = stripBinding.nativeAdContainer,
+            adUnitId = BuildConfig.DOWNLOADS_NATIVE_AD_UNIT_ID,
+        )
     }
 }

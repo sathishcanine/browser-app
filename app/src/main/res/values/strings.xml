@@ -297,6 +297,16 @@
     <string name="close_tab">Close current tab</string>
     <string name="close_all_tabs">Close all tabs</string>
     <string name="close_other_tabs">Close other tabs</string>
+    <string name="fab_menu_home">Home</string>
+    <string name="fab_menu_close_all_tabs">Close All Tab</string>
+    <string name="fab_menu_clear_history">Clear History</string>
+    <string name="fab_menu_downloads">Download</string>
+    <string name="fab_menu_move_address_bar_top">Set to Top</string>
+    <string name="fab_menu_move_address_bar_bottom">Set to Bottom</string>
+    <string name="menu_move_url_bar_to_top">Move URL bar to top</string>
+    <string name="menu_move_url_bar_to_bottom">Move URL bar to bottom</string>
+    <string name="dialog_close_all_tabs">Would you like to close all tabs?</string>
+    <string name="message_address_bar_already_top">Address bar is already at the top</string>
     <string name="third_party">Block 3rd party cookies</string>
     <string name="color_mode">Enable color mode</string>
     <string name="loading">Loading&#8230;</string>
