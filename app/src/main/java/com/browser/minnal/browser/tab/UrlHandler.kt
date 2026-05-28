@@ -60,6 +60,10 @@ class UrlHandler @Inject constructor(
             return continueLoadingUrl(view, url, headers)
         }
 
+        if (tryLaunchExternalScheme(view, url)) {
+            return true
+        }
+
         // Direct file-download URLs (e.g. https://.../video.mp4) must stay in the WebView so our
         // download listener fires and our in-built download manager grabs the bytes. Without
         // this guard, IntentUtils.startActivityForUrl(...) would resolve the URL through
@@ -87,6 +91,9 @@ class UrlHandler @Inject constructor(
 
         val browserDeepLink = extractHttpUrlFromBrowserDeepLink(url)
         if (browserDeepLink != null) {
+            if (tryLaunchExternalScheme(view, browserDeepLink)) {
+                return true
+            }
             return openInBackgroundTab(view, browserDeepLink, headers, requestNewTab)
         }
 
@@ -125,6 +132,9 @@ class UrlHandler @Inject constructor(
             ?: extractBrowserFallbackFromIntentUri(url)
             ?: extractHttpUrlFromIntentSchemeUrl(url)
         if (inAppUrl != null) {
+            if (tryLaunchExternalScheme(view, inAppUrl)) {
+                return true
+            }
             logger.log(TAG, "Loading intent target in background tab: $inAppUrl")
             return openInBackgroundTab(view, inAppUrl, headers, requestNewTab)
         }
@@ -166,6 +176,13 @@ class UrlHandler @Inject constructor(
     }
 
     /**
+     * Catches `mailto:`, Play Store, and similar navigations when `window.open` loads them in a
+     * new WebView without calling [shouldOverrideUrlLoading] first.
+     */
+    fun interceptDocumentNavigation(view: WebView, url: String): Boolean =
+        tryLaunchExternalScheme(view, url)
+
+    /**
      * Recover when the WebView tried to load `intent://` and failed with ERR_UNKNOWN_URL_SCHEME.
      */
     fun tryRecoverFromIntentSchemeError(
@@ -191,6 +208,10 @@ class UrlHandler @Inject constructor(
         requestNewTab: ((String) -> Unit)?,
     ): Boolean {
         view.stopLoading()
+        if (!url.isHttpOrHttps()) {
+            tryLaunchExternalScheme(view, url)
+            return true
+        }
         if (!popupTabGate.shouldAllowPopupTab(url)) {
             logger.log(TAG, "Suppressed extra popup tab, loading in current tab: $url")
             return continueLoadingUrl(view, url, headers)
@@ -218,6 +239,9 @@ class UrlHandler @Inject constructor(
         }
         // Link taps often report hasGesture=false; rely on WebView touch tracking too.
         if (hasGesture || popupTabGate.hadRecentUserGesture()) {
+            return false
+        }
+        if (isPlayStoreHttpUrl(url)) {
             return false
         }
         if (isLikelyAdRedirectUrl(url)) {
@@ -330,6 +354,70 @@ class UrlHandler @Inject constructor(
         return ext in DOWNLOAD_FILE_EXTENSIONS
     }
 
+    private fun tryLaunchExternalScheme(view: WebView, url: String): Boolean {
+        when {
+            url.startsWith("mailto:", ignoreCase = true) -> return launchMailTo(url, view)
+            url.startsWith("tel:", ignoreCase = true) -> {
+                return startExternalActivity(view, Intent(Intent.ACTION_DIAL, url.toUri()))
+            }
+            url.startsWith("sms:", ignoreCase = true) -> {
+                return startExternalActivity(view, Intent(Intent.ACTION_SENDTO, url.toUri()))
+            }
+            url.startsWith("market:", ignoreCase = true) -> {
+                return startExternalActivity(view, Intent(Intent.ACTION_VIEW, url.toUri()))
+            }
+            isPlayStoreHttpUrl(url) -> return tryLaunchPlayStore(view, url)
+            else -> return false
+        }
+    }
+
+    private fun launchMailTo(url: String, view: WebView): Boolean {
+        val mailTo = MailTo.parse(url)
+        val i = Utils.newEmailIntent(mailTo.to, mailTo.subject, mailTo.body, mailTo.cc)
+        return startExternalActivity(view, i)
+    }
+
+    private fun tryLaunchPlayStore(view: WebView, url: String): Boolean {
+        val uri = url.toUri()
+        val appId = uri.getQueryParameter("id")
+        if (!appId.isNullOrBlank()) {
+            val marketUri = Uri.parse("market://details?id=$appId")
+            if (startExternalActivity(view, Intent(Intent.ACTION_VIEW, marketUri))) {
+                return true
+            }
+        }
+        val playStoreIntent = Intent(Intent.ACTION_VIEW, uri).apply {
+            setPackage(PLAY_STORE_PACKAGE)
+        }
+        if (startExternalActivity(view, playStoreIntent)) {
+            return true
+        }
+        return startExternalActivity(view, Intent(Intent.ACTION_VIEW, uri))
+    }
+
+    private fun startExternalActivity(view: WebView, intent: Intent): Boolean {
+        return try {
+            activity.startActivity(intent)
+            view.stopLoading()
+            true
+        } catch (e: ActivityNotFoundException) {
+            false
+        }
+    }
+
+    private fun isPlayStoreHttpUrl(url: String): Boolean {
+        if (!url.isHttpOrHttps()) {
+            return false
+        }
+        val uri = url.toUri()
+        val host = uri.host?.lowercase() ?: return false
+        if (host != "play.google.com" && !host.endsWith(".play.google.com")) {
+            return false
+        }
+        val path = uri.path?.lowercase().orEmpty()
+        return path.contains("/store")
+    }
+
     private fun continueLoadingUrl(
         webView: WebView,
         url: String,
@@ -354,12 +442,8 @@ class UrlHandler @Inject constructor(
     }
 
     private fun isMailOrIntent(url: String, view: WebView): Boolean {
-        if (url.startsWith("mailto:")) {
-            val mailTo = MailTo.parse(url)
-            val i = Utils.newEmailIntent(mailTo.to, mailTo.subject, mailTo.body, mailTo.cc)
-            activity.startActivity(i)
-            view.reload()
-            return true
+        if (url.startsWith("mailto:", ignoreCase = true)) {
+            return launchMailTo(url, view).also { if (it) view.reload() }
         } else if (URLUtil.isFileUrl(url) && !url.isSpecialUrl()) {
             val file = File(url.replace(FILE, ""))
 
@@ -392,6 +476,7 @@ class UrlHandler @Inject constructor(
 
     companion object {
         private const val TAG = "UrlHandler"
+        private const val PLAY_STORE_PACKAGE = "com.android.vending"
 
         private val INTENT_SCHEME_PARAM = Regex("(?i)scheme=([^;\\s]+)")
         private val INTENT_FALLBACK_PARAM = Regex("(?i)S\\.browser_fallback_url=([^;]+);")

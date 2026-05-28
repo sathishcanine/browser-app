@@ -107,6 +107,9 @@ class TabWebViewClient @AssistedInject constructor(
             adBlocker.isAd(requestUrl)
 
     override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+        if (urlHandler.interceptDocumentNavigation(view, url)) {
+            return
+        }
         super.onPageStarted(view, url, favicon)
         currentUrl = url
         urlObservable.onNext(url)
