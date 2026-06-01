@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/tab_card"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="@dimen/tab_grid_spacing"
+    android:background="@drawable/tab_grid_card_bg"
+    android:clickable="true"
+    android:clipToOutline="true"
+    android:elevation="3dp"
+    android:focusable="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- Header strip: favicon + title -->
+        <LinearLayout
+            android:id="@+id/tab_item_background"
+            android:layout_width="match_parent"
+            android:layout_height="42dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingEnd="40dp">
+
+            <ImageView
+                android:id="@+id/faviconTab"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:contentDescription="@null"
+                tools:src="@drawable/ic_webpage" />
+
+            <TextView
+                android:id="@+id/textTab"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:maxLines="1"
+                android:singleLine="true"
+                android:textColor="?attr/autoCompleteTitleColor"
+                android:textSize="12sp"
+                tools:text="Google AdMob" />
+        </LinearLayout>
+
+        <!-- Screenshot preview -->
+        <ImageView
+            android:id="@+id/preview_image"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/tab_grid_card_preview_height"
+            android:background="?attr/selectedBackground"
+            android:contentDescription="@null"
+            android:scaleType="centerCrop" />
+    </LinearLayout>
+
+    <!-- Close button overlaid at top-right corner -->
+    <ImageView
+        android:id="@+id/deleteAction"
+        android:layout_width="34dp"
+        android:layout_height="34dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="4dp"
+        android:layout_marginEnd="4dp"
+        android:background="@drawable/tab_grid_close_bg"
+        android:contentDescription="@string/close_tab"
+        android:padding="8dp"
+        android:scaleType="center"
+        app:srcCompat="@drawable/ic_action_close"
+        app:tint="?attr/iconColor" />
+
+</FrameLayout>

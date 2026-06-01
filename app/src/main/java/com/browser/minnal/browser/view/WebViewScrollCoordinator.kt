@@ -1,6 +1,5 @@
 package com.browser.minnal.browser.view
 
-import com.browser.minnal.R
 import com.browser.minnal.databinding.BrowserBottomTabsBinding
 import com.browser.minnal.interpolator.BezierDecelerateInterpolator
 import com.browser.minnal.preference.UserPreferences
@@ -8,7 +7,6 @@ import com.browser.minnal.utils.Utils
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.view.GestureDetector
-import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
@@ -82,27 +80,9 @@ class WebViewScrollCoordinator @Inject constructor(
                 webView.translationY = 0f
             }
         } else {
-
-            val tabs = bottomTabsLayout!!
-
-            if (tabs.root.parent == null) {
-                (toolbar.parent as ViewGroup?)?.removeView(toolbar)
-                tabs.bottomTabContainer.addView(toolbar)
-                browserLayoutContainer.addView(
-                    tabs.root,
-                    FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.MATCH_PARENT,
-                        FrameLayout.LayoutParams.WRAP_CONTENT
-                    ).apply {
-                        gravity = Gravity.BOTTOM
-                    }
-                )
-                tabs.root.doOnLayout {
-                    tabs.root.translationY = tabs.bottomTabList.height.toFloat()
-                    val anchor = toolbarRoot.findViewById<View>(R.id.bottom_tabs_anchor)
-                    anchor.layoutParams = anchor.layoutParams.apply {
-                        height = toolbar.height
-                    }
+            bottomTabsLayout?.root?.doOnLayout { overlay ->
+                if (overlay.translationY == 0F && !isBottomTabDrawerOpen()) {
+                    overlay.translationY = overlay.height.toFloat()
                 }
             }
         }
@@ -126,17 +106,21 @@ class WebViewScrollCoordinator @Inject constructor(
     fun isBottomTabDrawerOpen(): Boolean = bottomTabsLayout?.root?.translationY == 0F
 
     fun openBottomTabDrawer() {
-        if (bottomTabsLayout!!.root.translationY > 0F) {
-            bottomTabsLayout.root.doOnLayout {
-                bottomTabsLayout.root.animateTranslation(0F)
+        bottomTabsLayout?.root?.let { root ->
+            root.doOnLayout {
+                if (root.translationY > 0F) {
+                    root.animateTranslation(0F)
+                }
             }
         }
     }
 
     fun closeBottomTabDrawer() {
-        if (bottomTabsLayout!!.root.translationY == 0F) {
-            bottomTabsLayout.root.doOnLayout {
-                bottomTabsLayout.root.animateTranslation(bottomTabsLayout.bottomTabList.height.toFloat())
+        bottomTabsLayout?.root?.let { root ->
+            if (root.translationY == 0F) {
+                root.doOnLayout {
+                    root.animateTranslation(root.height.toFloat())
+                }
             }
         }
     }

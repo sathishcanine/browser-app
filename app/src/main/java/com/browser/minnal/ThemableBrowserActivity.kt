@@ -24,7 +24,7 @@ abstract class ThemableBrowserActivity : AppCompatActivity() {
     internal lateinit var userPreferences: UserPreferences
 
     private var themeId: AppTheme = AppTheme.LIGHT
-    private var tabConfiguration: TabConfiguration = TabConfiguration.DRAWER_BOTTOM
+    private var tabConfiguration: TabConfiguration = TabConfiguration.DRAWER_SIDE
     private var shouldRunOnResumeActions = false
 
     /**

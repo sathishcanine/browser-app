@@ -1232,14 +1232,10 @@ class BrowserPresenter @Inject constructor(
      * incognito icon in incognito mode).
      */
     fun onTabCountViewClick() {
-        if (uiConfiguration.tabConfiguration == TabConfiguration.DRAWER_SIDE) {
+        if (uiConfiguration.tabConfiguration == TabConfiguration.DRAWER_SIDE ||
+            uiConfiguration.tabConfiguration == TabConfiguration.DRAWER_BOTTOM
+        ) {
             view?.openTabDrawer()
-        } else if (uiConfiguration.tabConfiguration == TabConfiguration.DRAWER_BOTTOM) {
-            if (isTabDrawerOpen) {
-                view?.closeTabDrawer()
-            } else {
-                view?.openTabDrawer()
-            }
         } else {
             loadHomePageWithoutBookmarkNativeAdStrip()
         }

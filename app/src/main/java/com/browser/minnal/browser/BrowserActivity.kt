@@ -16,9 +16,8 @@ import com.browser.minnal.browser.menu.MenuItemAdapter
 import com.browser.minnal.browser.search.IntentExtractor
 import com.browser.minnal.browser.search.SearchListener
 import com.browser.minnal.browser.search.StyleRemovingTextWatcher
-import com.browser.minnal.browser.tab.BottomDrawerTabRecyclerViewAdapter
 import com.browser.minnal.browser.tab.DesktopTabRecyclerViewAdapter
-import com.browser.minnal.browser.tab.DrawerTabRecyclerViewAdapter
+import com.browser.minnal.browser.tab.GridTabRecyclerViewAdapter
 import com.browser.minnal.browser.tab.TabPager
 import com.browser.minnal.browser.tab.TabViewHolder
 import com.browser.minnal.browser.tab.TabViewState
@@ -30,7 +29,6 @@ import com.browser.minnal.browser.menu.MenuSelection
 import com.browser.minnal.browser.view.ViewDelegate
 import com.browser.minnal.view.RadialFabMenu
 import com.browser.minnal.view.RadialFabMenuItem
-import com.browser.minnal.browser.view.delegates.BottomTabViewDelegate
 import com.browser.minnal.browser.view.delegates.DesktopTabViewDelegate
 import com.browser.minnal.browser.view.delegates.DrawerTabViewDelegate
 import com.browser.minnal.browser.view.targetUrl.LongPress
@@ -40,14 +38,13 @@ import com.browser.minnal.database.HistoryEntry
 import com.browser.minnal.database.SearchSuggestion
 import com.browser.minnal.database.WebPage
 import com.browser.minnal.database.downloads.DownloadEntry
-import com.browser.minnal.databinding.BrowserActivityBottomBinding
 import com.browser.minnal.databinding.BrowserActivityDesktopBinding
 import com.browser.minnal.databinding.BrowserActivityDrawerBinding
 import com.browser.minnal.databinding.BrowserBottomTabsBinding
 import com.browser.minnal.dialog.BrowserDialog
 import com.browser.minnal.dialog.DialogItem
 import com.browser.minnal.dialog.LightningDialogBuilder
-import com.browser.minnal.extensions.color
+import com.browser.minnal.icon.TabCountView
 import com.browser.minnal.extensions.drawable
 import com.browser.minnal.extensions.resizeAndShow
 import com.browser.minnal.extensions.snackbar
@@ -75,8 +72,13 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import android.widget.AdapterView
+import android.util.TypedValue
 import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.ProgressBar
 import androidx.activity.addCallback
+import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.constraintlayout.widget.ConstraintSet
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
 import androidx.annotation.MenuRes
@@ -85,6 +87,15 @@ import androidx.core.graphics.drawable.toDrawable
 import androidx.core.view.isVisible
 import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.drawerlayout.widget.DrawerLayout
+import com.browser.minnal.extensions.color
+import android.text.Editable
+import android.text.TextWatcher
+import android.widget.EditText
+import android.widget.TextView
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.doOnLayout
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -122,7 +133,13 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
 
     private var interstitialAccumulatedActiveMs = 0L
 
+    private var bottomTabsBinding: BrowserBottomTabsBinding? = null
+    private var addressBarContainer: ConstraintLayout? = null
+    private var tabGridTabCount: TabCountView? = null
+    private var tabGridEmptyView: TextView? = null
+    private var tabGridSearchView: EditText? = null
     private var pendingScroll = -1
+    private var tabGridDoneButton: View? = null
 
     private var defaultBrowserPrompt: AlertDialog? = null
 
@@ -209,25 +226,46 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
                 DesktopTabViewDelegate(actualBinding)
             }
 
-            TabConfiguration.DRAWER_SIDE -> {
+            TabConfiguration.DRAWER_SIDE, TabConfiguration.DRAWER_BOTTOM -> {
                 val actualBinding = BrowserActivityDrawerBinding.inflate(LayoutInflater.from(this))
                 DrawerTabViewDelegate(actualBinding)
             }
-
-            TabConfiguration.DRAWER_BOTTOM -> {
-                val actualBinding = BrowserActivityBottomBinding.inflate(LayoutInflater.from(this))
-                BottomTabViewDelegate(actualBinding)
-            }
         }
 
-        val bottomTabsBinding = if (binding.browserLayoutContainer != null) {
+        bottomTabsBinding = if (userPreferences.tabConfiguration != TabConfiguration.DESKTOP) {
             BrowserBottomTabsBinding.inflate(layoutInflater)
         } else {
             null
         }
 
         setContentView(binding.root)
+        if (userPreferences.tabConfiguration == TabConfiguration.DRAWER_BOTTOM) {
+            applyBottomAddressBarLayout()
+        }
         setSupportActionBar(binding.toolbar)
+
+        bottomTabsBinding?.let { tabs ->
+            val params = CoordinatorLayout.LayoutParams(
+                CoordinatorLayout.LayoutParams.MATCH_PARENT,
+                CoordinatorLayout.LayoutParams.MATCH_PARENT,
+            )
+            tabs.root.translationY = resources.displayMetrics.heightPixels.toFloat()
+            binding.root.addView(tabs.root, params)
+            ViewCompat.setOnApplyWindowInsetsListener(tabs.root) { v, insets ->
+                val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+                v.setPadding(0, systemBars.top, 0, systemBars.bottom)
+                insets
+            }
+            tabs.root.post { ViewCompat.requestApplyInsets(tabs.root) }
+            // Correct translationY after layout so the overlay is fully off-screen even
+            // on devices where displayMetrics.heightPixels < CoordinatorLayout.height
+            // (e.g. Samsung edge-to-edge with a tall navigation bar).
+            tabs.root.doOnLayout { overlay ->
+                if (overlay.translationY < overlay.height.toFloat()) {
+                    overlay.translationY = overlay.height.toFloat()
+                }
+            }
+        }
 
         injector.browser2ComponentBuilder()
             .activity(this)
@@ -295,46 +333,28 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         binding.tabCountView.isVisible =
             uiConfiguration.tabConfiguration != TabConfiguration.DESKTOP && !isIncognito()
 
-        if (uiConfiguration.tabConfiguration != TabConfiguration.DRAWER_SIDE) {
-            binding.drawerLayout.setDrawerLockMode(
-                DrawerLayout.LOCK_MODE_LOCKED_CLOSED,
-                binding.tabDrawer
-            )
-        }
+        // Always lock the tab side drawer — the standalone overlay is used for all configs.
+        binding.drawerLayout.setDrawerLockMode(
+            DrawerLayout.LOCK_MODE_LOCKED_CLOSED,
+            binding.tabDrawer
+        )
 
         if (uiConfiguration.tabConfiguration != TabConfiguration.DESKTOP) {
-            if (binding.browserLayoutContainer == null) {
-                tabsAdapter = DrawerTabRecyclerViewAdapter(
-                    onClick = presenter::onTabClick,
-                    onCloseClick = presenter::onTabClose,
-                    onLongClick = presenter::onTabLongClick
-                )
-                binding.drawerTabsList.isVisible = true
-                binding.drawerTabsList.adapter = tabsAdapter
-                binding.drawerTabsList.layoutManager = LinearLayoutManager(this)
-                binding.drawerTabsList.itemAnimator?.takeIfInstance<SimpleItemAnimator>()
-                    ?.supportsChangeAnimations = false
-                binding.desktopTabsList.isVisible = false
-                activeRecyclerView = binding.desktopTabsList
-            } else {
-                tabsAdapter = BottomDrawerTabRecyclerViewAdapter(
-                    themeProvider,
-                    onClick = presenter::onTabClick,
-                    onLongClick = presenter::onTabLongClick,
-                    onCloseClick = presenter::onTabClose,
-                    onBackClick = { presenter.onBackClick() },
-                    onForwardClick = { presenter.onForwardClick() },
-                    onHomeClick = { presenter.onHomeClick() }
-                )
-                bottomTabsBinding!!.bottomTabList.adapter = tabsAdapter
-                bottomTabsBinding.bottomTabList.layoutManager =
-                    LinearLayoutManager(this, RecyclerView.HORIZONTAL, false)
-                bottomTabsBinding.bottomTabList.itemAnimator?.takeIfInstance<SimpleItemAnimator>()
-                    ?.supportsChangeAnimations = false
-                binding.drawerTabsList.isVisible = false
-                binding.desktopTabsList.isVisible = false
-                activeRecyclerView = bottomTabsBinding.bottomTabList
-            }
+            tabsAdapter = createGridTabsAdapter()
+            val gridContent = bottomTabsBinding!!.tabGridContent
+            setupTabGridUi(
+                recyclerView = gridContent.drawerTabsList,
+                spanCount = 2,
+                tabCountView = gridContent.tabGridTabCount,
+                emptyView = gridContent.tabGridEmpty,
+                searchView = gridContent.tabGridSearch,
+                newTabView = gridContent.tabGridNewTab,
+                menuView = gridContent.tabGridMenu,
+                doneView = gridContent.tabGridDone,
+            )
+            binding.drawerTabsList.isVisible = false
+            binding.desktopTabsList.isVisible = false
+            activeRecyclerView = gridContent.drawerTabsList
         } else {
             tabsAdapter = DesktopTabRecyclerViewAdapter(
                 context = this,
@@ -408,18 +428,9 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
 
         binding.homeButton.setOnClickListener { presenter.onTabCountViewClick() }
         binding.toolbarHome.setOnClickListener { presenter.onHomeClick() }
-        binding.actionBack.setOnClickListener { presenter.onBackClick() }
-        binding.actionForward.setOnClickListener { presenter.onForwardClick() }
-        binding.actionHome.setOnClickListener { presenter.onHomeClick() }
-        binding.newTabButton.setOnClickListener { presenter.onNewTabClick() }
-        binding.newTabButton.setOnLongClickListener {
-            presenter.onNewTabLongClick()
-            true
-        }
         binding.searchRefresh.setOnClickListener { presenter.onRefreshOrStopClick() }
         binding.actionAddBookmark.setOnClickListener { presenter.onStarClick() }
         binding.actionPageTools.setOnClickListener { presenter.onToolsClick() }
-        binding.tabHeaderButton.setOnClickListener { presenter.onTabMenuClick() }
         binding.bookmarkBackButton.setOnClickListener { presenter.onBookmarkMenuClick() }
         binding.searchSslStatus.setOnClickListener { presenter.onSslIconClick() }
 
@@ -522,13 +533,73 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         radialFabMenu.setFabBottomInset(inset)
     }
 
+    private fun applyBottomAddressBarLayout() {
+        val toolbarLayout = binding.toolbarLayout
+        val toolbar = binding.toolbar
+        val progressView = binding.progressView
+        val uiLayout = binding.uiLayout
+
+        (toolbar.parent as? ViewGroup)?.removeView(toolbar)
+        (progressView.parent as? ViewGroup)?.removeView(progressView)
+
+        val bottomChrome = ConstraintLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            )
+            background = toolbarLayout.background
+            fitsSystemWindows = true
+            clipChildren = false
+            clipToPadding = false
+        }
+
+        val divider = View(this).apply {
+            id = View.generateViewId()
+            val typedValue = TypedValue()
+            theme.resolveAttribute(R.attr.dividerColor, typedValue, true)
+            setBackgroundColor(typedValue.data)
+        }
+
+        bottomChrome.addView(divider)
+        bottomChrome.addView(toolbar)
+        bottomChrome.addView(progressView)
+
+        val progressHeight = resources.getDimensionPixelSize(R.dimen.progress_bar_height)
+        val actionBarSize = TypedValue()
+        theme.resolveAttribute(android.R.attr.actionBarSize, actionBarSize, true)
+        val toolbarHeight = TypedValue.complexToDimensionPixelSize(
+            actionBarSize.data,
+            resources.displayMetrics,
+        )
+
+        ConstraintSet().apply {
+            clone(bottomChrome)
+            connect(divider.id, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP)
+            connect(divider.id, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START)
+            connect(divider.id, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
+            constrainHeight(divider.id, 1)
+            connect(toolbar.id, ConstraintSet.TOP, divider.id, ConstraintSet.BOTTOM)
+            connect(toolbar.id, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START)
+            connect(toolbar.id, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
+            constrainHeight(toolbar.id, toolbarHeight)
+            connect(progressView.id, ConstraintSet.TOP, toolbar.id, ConstraintSet.TOP)
+            connect(progressView.id, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START)
+            connect(progressView.id, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
+            constrainHeight(progressView.id, progressHeight)
+            applyTo(bottomChrome)
+        }
+
+        uiLayout.addView(bottomChrome)
+        addressBarContainer = bottomChrome
+    }
+
     private fun computeBottomToolbarInset(): Int {
         val rootLocation = IntArray(2)
         binding.root.getLocationInWindow(rootLocation)
         val rootBottom = rootLocation[1] + binding.root.height
 
         val chromeViews = buildList {
-            add(binding.toolbarLayout)
+            addressBarContainer?.let { add(it) } ?: add(binding.toolbar)
             if (binding.findBar.isVisible) {
                 add(binding.findBar)
             }
@@ -813,8 +884,14 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
      */
     fun renderTabs(tabListState: List<TabViewState>) {
         binding.tabCountView.updateCount(tabListState.size)
+        tabGridTabCount?.updateCount(tabListState.size)
+        val gridAdapter = tabsAdapter as? GridTabRecyclerViewAdapter
         val shouldScroll = tabsAdapter.itemCount < tabListState.size
-        tabsAdapter.submitList(tabListState)
+        if (gridAdapter != null) {
+            gridAdapter.submitTabList(tabListState)
+        } else {
+            tabsAdapter.submitList(tabListState)
+        }
         val nextSelected = tabListState.indexOfFirst(TabViewState::isSelected)
         if (shouldScroll && nextSelected != -1) {
             mainHandler.post {
@@ -825,6 +902,60 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
                 }
             }
         }
+    }
+
+    private fun createGridTabsAdapter(): GridTabRecyclerViewAdapter =
+        GridTabRecyclerViewAdapter(
+            themeProvider = themeProvider,
+            onClick = presenter::onTabClick,
+            onLongClick = presenter::onTabLongClick,
+            onCloseClick = presenter::onTabClose,
+            onFilterChanged = { showEmpty ->
+                tabGridEmptyView?.isVisible = showEmpty
+            },
+        )
+
+    private fun setupTabGridUi(
+        recyclerView: RecyclerView,
+        spanCount: Int,
+        tabCountView: TabCountView? = null,
+        emptyView: TextView? = null,
+        searchView: EditText? = null,
+        newTabView: View? = null,
+        menuView: View? = null,
+        doneView: View? = null,
+    ) {
+        recyclerView.adapter = tabsAdapter
+        recyclerView.layoutManager = GridLayoutManager(this, spanCount)
+        recyclerView.itemAnimator?.takeIfInstance<SimpleItemAnimator>()?.supportsChangeAnimations =
+            false
+
+        tabCountView?.let { tabGridTabCount = it }
+        emptyView?.let { tabGridEmptyView = it }
+        searchView?.let { editText ->
+            tabGridSearchView = editText
+            editText.addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) =
+                    Unit
+
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) =
+                    Unit
+
+                override fun afterTextChanged(s: Editable?) {
+                    (tabsAdapter as? GridTabRecyclerViewAdapter)?.filter(s?.toString().orEmpty())
+                }
+            })
+        }
+        newTabView?.setOnClickListener { presenter.onNewTabClick() }
+        menuView?.setOnClickListener { presenter.onTabMenuClick() }
+        doneView?.let { tabGridDoneButton = it }
+        doneView?.setOnClickListener { closeTabDrawer() }
+    }
+
+    private fun clearTabGridSearch() {
+        tabGridSearchView?.text = null
+        tabGridEmptyView?.isVisible = false
+        (tabsAdapter as? GridTabRecyclerViewAdapter)?.filter("")
     }
 
     /**
@@ -1049,15 +1180,13 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
      */
     fun openTabDrawer() {
         binding.drawerLayout.closeDrawer(binding.bookmarkDrawer)
-        if (binding.browserLayoutContainer == null) {
-            binding.drawerLayout.openDrawer(binding.tabDrawer)
-        } else {
-            presenter.onTabDrawerMoved(isOpen = true)
-            tabPager.openBottomTabDrawer()
-            if (pendingScroll != -1) {
-                activeRecyclerView?.scrollToPosition(pendingScroll)
-                pendingScroll = -1
-            }
+        inputMethodManager.hideSoftInputFromWindow(binding.root.windowToken, 0)
+        clearTabGridSearch()
+        presenter.onTabDrawerMoved(isOpen = true)
+        tabPager.openBottomTabDrawer()
+        if (pendingScroll != -1) {
+            activeRecyclerView?.scrollToPosition(pendingScroll)
+            pendingScroll = -1
         }
     }
 
@@ -1065,12 +1194,10 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
      * @see BrowserContract.View.closeTabDrawer
      */
     fun closeTabDrawer() {
-        if (binding.browserLayoutContainer == null) {
-            binding.drawerLayout.closeDrawer(binding.tabDrawer)
-        } else {
-            presenter.onTabDrawerMoved(isOpen = false)
-            tabPager.closeBottomTabDrawer()
-        }
+        presenter.onTabDrawerMoved(isOpen = false)
+        tabPager.closeBottomTabDrawer()
+        clearTabGridSearch()
+        inputMethodManager.hideSoftInputFromWindow(binding.root.windowToken, 0)
     }
 
     /**

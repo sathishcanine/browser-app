@@ -325,6 +325,9 @@
     <string name="dark_theme">Dark theme</string>
     <string name="settings_black_status_bar">Black status bar</string>
     <string name="tabs">Tabs</string>
+    <string name="search_tabs_hint">Search your tabs</string>
+    <string name="tab_search_no_results">No tabs match your search</string>
+    <string name="tab_grid_done">Done</string>
     <string name="theme">App theme</string>
     <string name="light_theme">Light theme</string>
     <string name="black_theme">Black theme (AMOLED)</string>
