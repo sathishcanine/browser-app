@@ -59,7 +59,7 @@ class WebViewFactory @Inject constructor(
      * Construct a [WebView] based on the user's preferences.
      */
     fun createWebView(): Lazy<WebView> = lazy {
-        WebView(activity).apply {
+        PullRefreshWebView(activity).apply {
             tag = CompositeTouchListener().also(::setOnTouchListener)
             isFocusableInTouchMode = true
             isFocusable = true

@@ -6,12 +6,11 @@ import com.browser.minnal.browser.view.WebViewLongPressHandler
 import com.browser.minnal.browser.view.WebViewScrollCoordinator
 import com.browser.minnal.browser.view.targetUrl.LongPress
 import com.browser.minnal.preference.UserPreferences
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebView
 import android.widget.FrameLayout
-import androidx.core.content.ContextCompat
 import androidx.core.view.children
-import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import javax.inject.Inject
 
 /**
@@ -27,7 +26,7 @@ class TabPager @Inject constructor(
 ) {
 
     private val webViews: MutableMap<Int, Lazy<WebView>> = mutableMapOf()
-    private val swipeWrappers: MutableMap<Int, SwipeRefreshLayout> = mutableMapOf()
+    private val pullRefreshWrappers: MutableMap<Int, PullToRefreshLayout> = mutableMapOf()
 
     var longPressListener: ((id: Int, longPress: LongPress) -> Unit)? = null
 
@@ -63,12 +62,12 @@ class TabPager @Inject constructor(
      * Remove pager bookkeeping for a tab that is being destroyed.
      */
     fun removeTabEntry(id: Int) {
-        swipeWrappers.remove(id)?.let { srl ->
-            (srl.getChildAt(0) as? WebView)?.let { wv ->
+        pullRefreshWrappers.remove(id)?.let { wrapper ->
+            (wrapper.getChildAt(0) as? WebView)?.let { wv ->
                 wv.setTag(R.id.tag_pull_refresh_layout, null)
-                srl.removeView(wv)
+                wrapper.removeView(wv)
             }
-            (srl.parent as? ViewGroup)?.removeView(srl)
+            (wrapper.parent as? ViewGroup)?.removeView(wrapper)
         }
         webViews.remove(id)
     }
@@ -99,44 +98,48 @@ class TabPager @Inject constructor(
 
     private fun wrapWebViewIfNeeded(tabId: Int, webView: WebView): ViewGroup {
         if (!userPreferences.pullToRefreshEnabled) {
-            unwrapFromSwipeIfNeeded(tabId, webView)
+            unwrapFromPullRefreshIfNeeded(tabId, webView)
             webView.setTag(R.id.tag_pull_refresh_layout, null)
             return webView
         }
 
-        val swipe = swipeWrappers.getOrPut(tabId) {
-            SwipeRefreshLayout(container.context).apply {
-                setColorSchemeColors(ContextCompat.getColor(container.context, R.color.accent_color))
-                setProgressBackgroundColorSchemeColor(
-                    ContextCompat.getColor(container.context, R.color.primary_color)
-                )
-                setOnRefreshListener {
-                    webView.reload()
+        val wrapper = pullRefreshWrappers.getOrPut(tabId) {
+            PullToRefreshLayout(container.context).apply {
+                targetWebView = webView
+                onRefreshListener = {
+                    val wv = targetWebView
+                    setRefreshing(true)
+                    wv?.stopLoading()
+                    wv?.reload()
                 }
             }
         }
 
-        if (webView.parent != swipe) {
+        wrapper.targetWebView = webView
+
+        if (webView.parent != wrapper) {
             (webView.parent as? ViewGroup)?.removeView(webView)
-            swipe.removeAllViews()
-            swipe.addView(
+            wrapper.addView(
                 webView,
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
+            wrapper.bringProgressToFront()
         }
 
-        webView.setTag(R.id.tag_pull_refresh_layout, swipe)
-        swipe.isEnabled = true
-        return swipe
+        webView.isNestedScrollingEnabled = true
+        webView.overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+        webView.setTag(R.id.tag_pull_refresh_layout, wrapper)
+        return wrapper
     }
 
-    private fun unwrapFromSwipeIfNeeded(tabId: Int, webView: WebView) {
-        swipeWrappers.remove(tabId)?.let { srl ->
-            if (webView.parent == srl) {
-                srl.removeView(webView)
+    private fun unwrapFromPullRefreshIfNeeded(tabId: Int, webView: WebView) {
+        webView.overScrollMode = View.OVER_SCROLL_NEVER
+        pullRefreshWrappers.remove(tabId)?.let { wrapper ->
+            if (webView.parent == wrapper) {
+                wrapper.removeView(webView)
             }
-            (srl.parent as? ViewGroup)?.removeView(srl)
+            (wrapper.parent as? ViewGroup)?.removeView(wrapper)
         }
     }
 
@@ -144,7 +147,7 @@ class TabPager @Inject constructor(
         children.toList().forEach { child ->
             val tabId = when (child) {
                 is WebView -> child.id
-                is SwipeRefreshLayout -> (child.getChildAt(0) as? WebView)?.id ?: Int.MIN_VALUE
+                is PullToRefreshLayout -> child.targetWebView?.id ?: Int.MIN_VALUE
                 else -> Int.MIN_VALUE
             }
             if (tabId != excludeId) {

@@ -87,7 +87,8 @@
                 android:layout_height="0dp"
                 android:layout_weight="1"
                 android:background="@color/primary_color"
-                android:clipChildren="true" />
+                android:clipChildren="false"
+                android:clipToPadding="false" />
 
             <include
                 android:id="@+id/bookmark_native_ad_strip"

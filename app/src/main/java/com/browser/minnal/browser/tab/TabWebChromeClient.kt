@@ -28,7 +28,6 @@ import androidx.activity.result.ActivityResult
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.FragmentActivity
 import androidx.palette.graphics.Palette
-import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.permissionx.guolindev.PermissionX
 import io.reactivex.rxjava3.core.Scheduler
 import io.reactivex.rxjava3.subjects.BehaviorSubject
@@ -153,7 +152,7 @@ class TabWebChromeClient @Inject constructor(
     override fun onProgressChanged(view: WebView, newProgress: Int) {
         progressObservable.onNext(newProgress)
         if (newProgress == 100) {
-            (view.getTag(R.id.tag_pull_refresh_layout) as? SwipeRefreshLayout)?.isRefreshing = false
+            (view.getTag(R.id.tag_pull_refresh_layout) as? PullToRefreshLayout)?.setRefreshing(false)
         }
     }
 

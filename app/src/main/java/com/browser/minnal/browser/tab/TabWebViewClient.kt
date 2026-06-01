@@ -26,7 +26,6 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.appcompat.app.AlertDialog
-import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.webkit.WebViewAssetLoader.InternalStoragePathHandler
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
@@ -124,6 +123,7 @@ class TabWebViewClient @AssistedInject constructor(
             return
         }
         super.onPageStarted(view, url, favicon)
+        (view as? PullRefreshWebView)?.resetScrollTopState()
         currentUrl = url
         urlObservable.onNext(url)
         if (urlWithSslError != url) {
@@ -139,7 +139,8 @@ class TabWebViewClient @AssistedInject constructor(
 
     override fun onPageFinished(view: WebView, url: String) {
         super.onPageFinished(view, url)
-        (view.getTag(R.id.tag_pull_refresh_layout) as? SwipeRefreshLayout)?.isRefreshing = false
+        (view as? PullRefreshWebView)?.installScrollTopBridge()
+        (view.getTag(R.id.tag_pull_refresh_layout) as? PullToRefreshLayout)?.setRefreshing(false)
         urlObservable.onNext(url)
         goBackObservable.onNext(view.canGoBack())
         goForwardObservable.onNext(view.canGoForward())
