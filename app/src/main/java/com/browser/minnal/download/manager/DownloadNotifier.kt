@@ -11,6 +11,7 @@ import android.text.format.Formatter
 import androidx.core.app.NotificationCompat
 import com.browser.minnal.DefaultBrowserActivity
 import com.browser.minnal.R
+import com.browser.minnal.utils.VideoViewerIntent
 import com.browser.minnal.database.downloads.DownloadStatus
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -168,11 +169,7 @@ class DownloadNotifier @Inject constructor(
         // we only build the intent for content URIs to keep this safe.
         val parsed = runCatching { Uri.parse(localPath) }.getOrNull() ?: return null
         if (parsed.scheme != "content") return null
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(parsed, mimeType ?: "*/*")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
+        val intent = VideoViewerIntent.buildViewIntent(application, parsed, mimeType)
         return PendingIntent.getActivity(
             application,
             localPath.hashCode(),

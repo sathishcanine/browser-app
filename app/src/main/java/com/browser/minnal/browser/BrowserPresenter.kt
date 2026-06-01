@@ -643,18 +643,22 @@ class BrowserPresenter @Inject constructor(
             }
 
             currentTab?.canGoBack() == true -> goBackInCurrentTab()
-            currentTab?.canGoBack() == false -> if (incognitoMode) {
-                currentTab?.id?.let {
+            currentTab?.canGoBack() == false -> when {
+                incognitoMode -> currentTab?.id?.let {
                     view?.showCloseBrowserDialog(it)
                 }
-            } else if (currentTab?.tabType in listOf(
+
+                currentTab?.url?.isDownloadsUrl() == true ||
+                    currentTab?.url?.isBookmarkUrl() == true ||
+                    currentTab?.url?.isHistoryUrl() == true ->
+                    loadHomePageWithoutBookmarkNativeAdStrip()
+
+                currentTab?.tabType in listOf(
                     TabModel.Type.EPHEMERAL,
-                    TabModel.Type.POP_UP
-                )
-            ) {
-                onTabClose(tabListState.indexOfCurrentTab())
-            } else {
-                navigator.backgroundBrowser()
+                    TabModel.Type.POP_UP,
+                ) -> onTabClose(tabListState.indexOfCurrentTab())
+
+                else -> navigator.backgroundBrowser()
             }
         }
     }
@@ -713,7 +717,16 @@ class BrowserPresenter @Inject constructor(
     }
 
     fun closeAllTabs() {
-        onCloseBrowserEvent(0, BrowserContract.CloseTabEvent.CLOSE_ALL)
+        closeAllTabsAndGoHome()
+    }
+
+    private fun closeAllTabsAndGoHome() {
+        compositeDisposable += model.deleteAllTabs()
+            .observeOn(mainScheduler)
+            .subscribeBy {
+                view?.closeTabDrawer()
+                createNewTabAndSelect(homePageInitializer, shouldSelect = true)
+            }
     }
 
     fun clearHistory(context: android.content.Context, onComplete: () -> Unit) {
@@ -1335,9 +1348,7 @@ class BrowserPresenter @Inject constructor(
                 .subscribeOn(mainScheduler)
                 .subscribe()
 
-            BrowserContract.CloseTabEvent.CLOSE_ALL ->
-                compositeDisposable += model.deleteAllTabs().subscribeOn(mainScheduler)
-                    .subscribeBy(onComplete = navigator::closeBrowser)
+            BrowserContract.CloseTabEvent.CLOSE_ALL -> closeAllTabsAndGoHome()
         }
     }
 

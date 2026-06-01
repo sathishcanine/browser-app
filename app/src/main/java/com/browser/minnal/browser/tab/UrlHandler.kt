@@ -9,6 +9,7 @@ import com.browser.minnal.log.Logger
 import com.browser.minnal.preference.UserPreferences
 import com.browser.minnal.utils.IntentUtils
 import com.browser.minnal.utils.Utils
+import com.browser.minnal.utils.VideoViewerIntent
 import com.browser.minnal.utils.isSpecialUrl
 import android.app.Activity
 import android.content.ActivityNotFoundException
@@ -457,18 +458,12 @@ class UrlHandler @Inject constructor(
                 val newMimeType = MimeTypeMap.getSingleton()
                     .getMimeTypeFromExtension(Utils.guessFileExtension(file.toString()))
 
-                val intent = Intent(Intent.ACTION_VIEW)
-                intent.flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
                 val contentUri = FileProvider.getUriForFile(
                     activity,
                     BuildConfig.APPLICATION_ID + ".fileprovider",
                     file
                 )
-                intent.setDataAndType(contentUri, newMimeType)
-
-                try {
-                    activity.startActivity(intent)
-                } catch (e: Exception) {
+                if (!VideoViewerIntent.launch(activity, contentUri, newMimeType)) {
                     println("LightningWebClient: cannot open downloaded file")
                 }
 

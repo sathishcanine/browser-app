@@ -1,6 +1,7 @@
 package com.browser.minnal.download.manager
 
 import android.app.Application
+import com.browser.minnal.utils.VideoViewerIntent
 import android.content.Intent
 import android.net.Uri
 import android.text.format.Formatter
@@ -228,15 +229,9 @@ class MinnalDownloadManager @Inject constructor(
             return false
         }
 
-        val resolvedMime = mimeType?.takeIf { it.isNotBlank() }
-            ?: application.contentResolver.getType(uri)
-            ?: "*/*"
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, resolvedMime)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        return runCatching { application.startActivity(intent); true }.getOrElse {
+        return runCatching {
+            VideoViewerIntent.launch(application, uri, mimeType)
+        }.getOrElse {
             logger.log(TAG, "openCommittedFile: no app could view $localPath", it)
             false
         }

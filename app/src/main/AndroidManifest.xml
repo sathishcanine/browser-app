@@ -227,4 +227,13 @@
             tools:node="merge" />
     </application>
 
+    <!-- Package visibility (API 30+): detect Zen Video Player for opening completed videos. -->
+    <queries>
+        <package android:name="com.player.zen_video_player" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="video/*" />
+        </intent>
+    </queries>
+
 </manifest>
