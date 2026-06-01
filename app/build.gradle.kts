@@ -76,6 +76,11 @@ android {
             )
             buildConfigField(
                 "String",
+                "BOOKMARK_NATIVE_AD_DEFAULT_BROWSER_UNIT_ID",
+                "\"ca-app-pub-3940256099942544/2247696110\""
+            )
+            buildConfigField(
+                "String",
                 "DOWNLOADS_NATIVE_AD_UNIT_ID",
                 "\"ca-app-pub-3940256099942544/2247696110\""
             )
@@ -111,6 +116,11 @@ android {
                 "String",
                 "BOOKMARK_NATIVE_AD_UNIT_ID",
                 "\"ca-app-pub-8723888126390754/2176244375\""
+            )
+            buildConfigField(
+                "String",
+                "BOOKMARK_NATIVE_AD_DEFAULT_BROWSER_UNIT_ID",
+                "\"ca-app-pub-8723888126390754/6435034102\""
             )
             buildConfigField(
                 "String",

@@ -18,6 +18,7 @@ import android.widget.ImageButton
 import androidx.core.view.isVisible
 import androidx.fragment.app.FragmentActivity
 import com.browser.minnal.rating.RatingPromptDialog
+import com.browser.minnal.utils.DefaultBrowserHelper
 
 /**
  * Native advanced ad strip (expand/collapse, optional close). Used for the bookmarks start page,
@@ -29,7 +30,7 @@ class BookmarkNativeAdController private constructor(
     private val expandToggle: ImageButton,
     private val closeButton: ImageButton?,
     private val adContainer: FrameLayout,
-    private val adUnitId: String,
+    private val adUnitId: () -> String,
 ) {
 
     /**
@@ -111,7 +112,7 @@ class BookmarkNativeAdController private constructor(
         ensureNativeAdViewInflated()
         val adView = nativeAdViewBinding?.root as? NativeAdView ?: return
 
-        AdLoader.Builder(activity, adUnitId)
+        AdLoader.Builder(activity, adUnitId())
             .forNativeAd { ad ->
                 loadedNativeAd?.destroy()
                 loadedNativeAd = ad
@@ -205,7 +206,13 @@ class BookmarkNativeAdController private constructor(
             expandToggle = stripBinding.nativeAdExpandToggle,
             closeButton = stripBinding.nativeAdClose,
             adContainer = stripBinding.nativeAdContainer,
-            adUnitId = BuildConfig.BOOKMARK_NATIVE_AD_UNIT_ID,
+            adUnitId = {
+                if (DefaultBrowserHelper.isAppDefaultBrowser(activity)) {
+                    BuildConfig.BOOKMARK_NATIVE_AD_DEFAULT_BROWSER_UNIT_ID
+                } else {
+                    BuildConfig.BOOKMARK_NATIVE_AD_UNIT_ID
+                }
+            },
         )
 
         fun forDownloads(
@@ -217,7 +224,7 @@ class BookmarkNativeAdController private constructor(
             expandToggle = stripBinding.nativeAdExpandToggle,
             closeButton = null,
             adContainer = stripBinding.nativeAdContainer,
-            adUnitId = BuildConfig.DOWNLOADS_NATIVE_AD_UNIT_ID,
+            adUnitId = { BuildConfig.DOWNLOADS_NATIVE_AD_UNIT_ID },
         )
     }
 }
