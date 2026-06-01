@@ -32,10 +32,18 @@ class AppOpenAdHelper @Inject constructor(
     private var suppressCount = 0
 
     private var onAdLoadedListener: (() -> Unit)? = null
+    private var onAdIdleListener: (() -> Unit)? = null
 
     fun setOnAdLoadedListener(listener: (() -> Unit)?) {
         onAdLoadedListener = listener
     }
+
+    /** Fired when the app-open ad is dismissed, fails to show, or fails to load. */
+    fun setOnAdIdleListener(listener: (() -> Unit)?) {
+        onAdIdleListener = listener
+    }
+
+    fun isLoadingAd(): Boolean = isLoading
 
     fun isSuppressed(): Boolean = suppressCount > 0
 
@@ -74,6 +82,7 @@ class AppOpenAdHelper @Inject constructor(
                 override fun onAdFailedToLoad(error: LoadAdError) {
                     isLoading = false
                     logger.log(TAG, "App open ad failed to load: ${error.message}")
+                    onAdIdleListener?.invoke()
                 }
             },
         )
@@ -95,15 +104,16 @@ class AppOpenAdHelper @Inject constructor(
             override fun onAdDismissedFullScreenContent() {
                 clearLoadedAd()
                 isShowing = false
-                // Preload for the next background → foreground transition only.
-                load(activity.applicationContext)
+                onAdIdleListener?.invoke()
+                preloadAfterShow(activity)
             }
 
             override fun onAdFailedToShowFullScreenContent(error: AdError) {
                 clearLoadedAd()
                 isShowing = false
                 logger.log(TAG, "App open ad failed to show: ${error.message}")
-                load(activity.applicationContext)
+                onAdIdleListener?.invoke()
+                preloadAfterShow(activity)
             }
 
             override fun onAdShowedFullScreenContent() {
@@ -117,9 +127,17 @@ class AppOpenAdHelper @Inject constructor(
             isShowing = false
             clearLoadedAd()
             logger.log(TAG, "App open ad show threw", it)
-            load(activity.applicationContext)
+            onAdIdleListener?.invoke()
+            preloadAfterShow(activity)
             false
         }
+    }
+
+    private fun preloadAfterShow(activity: Activity) {
+        if (activity.isFinishing || activity.isDestroyed) {
+            return
+        }
+        load(activity)
     }
 
     private fun isAdAvailable(): Boolean {

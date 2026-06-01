@@ -42,6 +42,11 @@ interface BrowserContract {
         fun playBackgroundTabAddedAnimation()
 
         /**
+         * Show the Play Store rating prompt when eligible (home screen on cold app open).
+         */
+        fun showRatingPromptIfEligible()
+
+        /**
          * Show the dialog to add a bookmark for the current page.
          *
          * @param title The current title of the page.

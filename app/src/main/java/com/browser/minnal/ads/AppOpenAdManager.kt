@@ -13,8 +13,8 @@ import javax.inject.Singleton
 /**
  * Shows an app-open ad when the user returns to the browser from the background.
  *
- * Does not show on cold start. The ad is shown from [onActivityResumed] (activity must be active).
- * [ProcessLifecycleOwner] only tracks whether the whole app was backgrounded vs in-app navigation.
+ * Does not show on cold start. Other full-screen UI (e.g. rating prompt) should wait until
+ * [isBlockingRatingPrompt] is false — see [setOnAppOpenFlowIdleListener].
  */
 @Singleton
 class AppOpenAdManager @Inject constructor(
@@ -41,6 +41,8 @@ class AppOpenAdManager @Inject constructor(
     /** Ad was not ready on resume; retry when [AppOpenAdHelper] finishes loading. */
     private var awaitingAdForForeground = false
 
+    private var onAppOpenFlowIdleListener: (() -> Unit)? = null
+
     fun start() {
         if (started || isIncognitoProcess()) {
             return
@@ -49,12 +51,23 @@ class AppOpenAdManager @Inject constructor(
         application.registerActivityLifecycleCallbacks(this)
         ProcessLifecycleOwner.get().lifecycle.addObserver(this)
         appOpenAdHelper.setOnAdLoadedListener { onAppOpenAdLoaded() }
-        appOpenAdHelper.load(application.applicationContext)
+        appOpenAdHelper.setOnAdIdleListener { onAppOpenAdIdle() }
     }
+
+    fun setOnAppOpenFlowIdleListener(listener: (() -> Unit)?) {
+        onAppOpenFlowIdleListener = listener
+    }
+
+    /**
+     * True while an app-open ad is visible or we are still trying to show one after backgrounding.
+     * The rating prompt should wait until this is false.
+     */
+    fun isBlockingRatingPrompt(): Boolean =
+        appOpenAdHelper.isShowingAd() || awaitingAdForForeground
 
     override fun onStart(owner: LifecycleOwner) {
         if (!wasAppBackgrounded) {
-            appOpenAdHelper.load(application.applicationContext)
+            resumedBrowserActivity?.let { preload(it) }
         }
     }
 
@@ -100,15 +113,21 @@ class AppOpenAdManager @Inject constructor(
             return
         }
         if (activity.isFinishing || activity.isDestroyed) {
+            finishAppOpenForegroundFlow()
             return
         }
         if (appOpenAdHelper.showIfAvailable(activity)) {
             showedAdThisForegroundSession = true
             pendingShowOnNextBrowserResume = false
             awaitingAdForForeground = false
+        } else if (appOpenAdHelper.isAdReady() || appOpenAdHelper.isLoadingAd()) {
+            awaitingAdForForeground = true
+            if (!appOpenAdHelper.isLoadingAd() && !appOpenAdHelper.isAdReady()) {
+                preload(activity)
+            }
         } else {
             awaitingAdForForeground = true
-            appOpenAdHelper.load(application.applicationContext)
+            preload(activity)
         }
     }
 
@@ -116,11 +135,47 @@ class AppOpenAdManager @Inject constructor(
         if (!awaitingAdForForeground || showedAdThisForegroundSession) {
             return
         }
-        val activity = resumedBrowserActivity ?: return
+        val activity = resumedBrowserActivity ?: run {
+            finishAppOpenForegroundFlow()
+            return
+        }
         if (!wasAppBackgrounded) {
             return
         }
-        tryShowOnResume(activity)
+        if (activity.isFinishing || activity.isDestroyed) {
+            finishAppOpenForegroundFlow()
+            return
+        }
+        if (appOpenAdHelper.showIfAvailable(activity)) {
+            showedAdThisForegroundSession = true
+            awaitingAdForForeground = false
+        } else {
+            finishAppOpenForegroundFlow()
+        }
+    }
+
+    private fun onAppOpenAdIdle() {
+        if (appOpenAdHelper.isShowingAd()) {
+            return
+        }
+        if (awaitingAdForForeground) {
+            finishAppOpenForegroundFlow()
+        }
+    }
+
+    private fun finishAppOpenForegroundFlow() {
+        awaitingAdForForeground = false
+        if (!showedAdThisForegroundSession) {
+            showedAdThisForegroundSession = true
+        }
+        onAppOpenFlowIdleListener?.invoke()
+    }
+
+    private fun preload(activity: DefaultBrowserActivity) {
+        if (activity.isFinishing || activity.isDestroyed) {
+            return
+        }
+        appOpenAdHelper.load(activity)
     }
 
     override fun onActivityCreated(activity: Activity, savedInstanceState: android.os.Bundle?) = Unit

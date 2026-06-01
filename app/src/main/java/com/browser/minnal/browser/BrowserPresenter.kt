@@ -43,14 +43,22 @@ import com.browser.minnal.search.SearchEngineProvider
 import com.browser.minnal.ssl.SslState
 import com.browser.minnal.utils.Option
 import com.browser.minnal.utils.QUERY_PLACE_HOLDER
+import com.browser.minnal.ads.AppOpenAdManager
+import com.browser.minnal.rating.RatingPromptDialog
+import com.browser.minnal.rating.RatingPromptHelper
 import com.browser.minnal.utils.isBookmarkUrl
 import com.browser.minnal.utils.isDownloadsUrl
+import com.browser.minnal.utils.isStartPageUrl
 import com.browser.minnal.utils.isHistoryUrl
 import com.browser.minnal.utils.isSpecialUrl
 import com.browser.minnal.utils.smartUrlFilter
 import com.browser.minnal.utils.value
 import androidx.activity.result.ActivityResult
 import androidx.core.net.toUri
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
+import java.util.concurrent.TimeUnit
 import com.browser.minnal.utils.WebUtils
 import io.reactivex.rxjava3.core.Completable
 import io.reactivex.rxjava3.core.Maybe
@@ -95,8 +103,25 @@ class BrowserPresenter @Inject constructor(
     private val tabCountNotifier: TabCountNotifier,
     private val minnalDownloadManager: MinnalDownloadManager,
     private val popupTabGate: PopupTabGate,
+    private val ratingPromptHelper: RatingPromptHelper,
+    private val appOpenAdManager: AppOpenAdManager,
     @IncognitoMode private val incognitoMode: Boolean
 ) {
+
+    private var ratingPromptScheduled = false
+
+    /** True until the user backgrounds the app; only then may the home-screen prompt show. */
+    private var ratingPromptEligibleOnColdStart = false
+
+    /** Home prompt was deferred (e.g. app-open ad); retry without waiting for resume. */
+    private var pendingRatingPromptOnHome = false
+
+    private var coldStartRatingRetriesScheduled = false
+
+    private var isBrowserInForeground = false
+
+    /** Clears cold-start rating eligibility when the app leaves foreground (not activity pause). */
+    private var processStopObserver: DefaultLifecycleObserver? = null
 
     private var view: BrowserContract.View? = null
     private var viewState: BrowserViewState = BrowserViewState(
@@ -142,6 +167,19 @@ class BrowserPresenter @Inject constructor(
     fun onViewAttached(view: BrowserContract.View) {
         this.view = view
         view.updateState(viewState)
+        ratingPromptHelper.recordFirstLaunchIfNeeded()
+        if (!incognitoMode) {
+            appOpenAdManager.setOnAppOpenFlowIdleListener {
+                tryShowPendingRatingPromptIfNeeded()
+            }
+            processStopObserver = object : DefaultLifecycleObserver {
+                override fun onStop(owner: LifecycleOwner) {
+                    ratingPromptEligibleOnColdStart = false
+                    pendingRatingPromptOnHome = false
+                    coldStartRatingRetriesScheduled = false
+                }
+            }.also { ProcessLifecycleOwner.get().lifecycle.addObserver(it) }
+        }
 
         cookieAdministrator.adjustCookieSettings()
 
@@ -187,6 +225,7 @@ class BrowserPresenter @Inject constructor(
                     createNewTabAndSelect(downloadPageInitializer, shouldSelect = true)
                 }
             }
+
     }
 
     /**
@@ -194,15 +233,32 @@ class BrowserPresenter @Inject constructor(
      */
     fun onViewDetached() {
         view = null
+        processStopObserver?.let { ProcessLifecycleOwner.get().lifecycle.removeObserver(it) }
+        processStopObserver = null
 
         compositeDisposable.dispose()
         tabDisposable.dispose()
     }
 
     /**
+     * Call when the browser activity is visible again ([android.app.Activity.onResume]).
+     *
+     * @param isColdStartResume true only for the first resume after a fresh activity launch
+     * (not when returning from background).
+     */
+    fun onViewShown(isColdStartResume: Boolean) {
+        isBrowserInForeground = true
+        if (isColdStartResume) {
+            ratingPromptEligibleOnColdStart = true
+            scheduleColdStartRatingPromptAttempts()
+        }
+    }
+
+    /**
      * Call when the view is hidden (i.e. the browser is sent to the background).
      */
     fun onViewHidden() {
+        isBrowserInForeground = false
         model.markAllNonEphemeral()
         model.freeze()
     }
@@ -306,15 +362,26 @@ class BrowserPresenter @Inject constructor(
             .subscribeOn(mainScheduler)
             .subscribeBy(onNext = navigator::download)
 
+        var previousTabUrl = tab.url
         tabDisposable += tab.urlChanges()
+            .startWithItem(tab.url)
             .distinctUntilChanged()
             .subscribeOn(mainScheduler)
             .subscribeBy { url ->
+                if (ratingPromptEligibleOnColdStart && isHomeScreenUrl(url)) {
+                    maybeShowRatingPromptOnHome()
+                }
+                previousTabUrl = url
                 url.takeIf { !it.isSpecialUrl() && it.isNotBlank() }?.let {
                     historyRecord.visit(tab.title, it)
                 }
                 view?.showToolbar()
             }
+
+        if (ratingPromptEligibleOnColdStart) {
+            maybeShowRatingPromptOnHome()
+            scheduleColdStartRatingPromptAttempts()
+        }
 
         tabDisposable += tab.createWindowRequests()
             .subscribeOn(mainScheduler)
@@ -522,6 +589,73 @@ class BrowserPresenter @Inject constructor(
         view?.playBackgroundTabAddedAnimation()
     }
 
+    private fun maybeShowRatingPromptOnHome() {
+        if (!ratingPromptEligibleOnColdStart || incognitoMode || ratingPromptScheduled) {
+            return
+        }
+        if (!ratingPromptHelper.shouldShowRatingPrompt()) {
+            return
+        }
+        if (!isHomeScreenUrl(currentTab?.url.orEmpty())) {
+            return
+        }
+        if (!isBrowserInForeground) {
+            return
+        }
+        if (appOpenAdManager.isBlockingRatingPrompt()) {
+            pendingRatingPromptOnHome = true
+            return
+        }
+        if (RatingPromptDialog.isShowing()) {
+            return
+        }
+        pendingRatingPromptOnHome = false
+        view?.showRatingPromptIfEligible()
+    }
+
+    fun onRatingPromptShown() {
+        ratingPromptScheduled = true
+        pendingRatingPromptOnHome = false
+    }
+
+    private fun scheduleColdStartRatingPromptAttempts() {
+        if (!ratingPromptEligibleOnColdStart || coldStartRatingRetriesScheduled) {
+            return
+        }
+        coldStartRatingRetriesScheduled = true
+        COLD_START_RATING_RETRY_DELAYS_MS.forEach { delayMs ->
+            compositeDisposable += Completable.timer(delayMs, TimeUnit.MILLISECONDS, mainScheduler)
+                .subscribe { maybeShowRatingPromptOnHome() }
+        }
+    }
+
+    private fun tryShowPendingRatingPromptIfNeeded() {
+        if (!pendingRatingPromptOnHome || !ratingPromptEligibleOnColdStart) {
+            return
+        }
+        pendingRatingPromptOnHome = false
+        maybeShowRatingPromptOnHome()
+    }
+
+    fun onRatingPromptDismissed() {
+        ratingPromptScheduled = false
+        pendingRatingPromptOnHome = false
+        ratingPromptEligibleOnColdStart = false
+        coldStartRatingRetriesScheduled = false
+    }
+
+    /** Dialog could not be shown yet (e.g. no window focus); retry while still on cold start. */
+    fun onRatingPromptDeferred() {
+        ratingPromptScheduled = false
+        pendingRatingPromptOnHome = true
+        compositeDisposable += Completable.timer(400, TimeUnit.MILLISECONDS, mainScheduler)
+            .subscribe { tryShowPendingRatingPromptIfNeeded() }
+    }
+
+    companion object {
+        private val COLD_START_RATING_RETRY_DELAYS_MS = longArrayOf(400L, 1_000L, 2_000L)
+    }
+
     private fun List<TabViewState>.tabIndexForId(id: Int?): Int =
         indexOfFirst { it.id == id }
 
@@ -709,6 +843,9 @@ class BrowserPresenter @Inject constructor(
         suppressBookmarkNativeAdAfterHistoryBack = true
         currentTab?.loadFromInitializer(homePageInitializer)
     }
+
+    private fun isHomeScreenUrl(url: String): Boolean =
+        url.isStartPageUrl() || url.isBookmarkUrl()
 
     private fun computeShowBookmarkNativeAdStrip(url: String): Boolean =
         url.isBookmarkUrl() && !incognitoMode && !suppressBookmarkNativeAdAfterHistoryBack

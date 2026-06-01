@@ -73,6 +73,10 @@ class BrowserStateAdapter(private val browserActivity: BrowserActivity) : Browse
         browserActivity.playBackgroundTabAddedAnimation()
     }
 
+    override fun showRatingPromptIfEligible() {
+        browserActivity.showRatingPromptIfEligible()
+    }
+
     override fun showAddBookmarkDialog(title: String, url: String, folders: List<String>) {
         browserActivity.showAddBookmarkDialog(title, url, folders)
     }

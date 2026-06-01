@@ -27,6 +27,8 @@ import com.browser.minnal.browser.ui.TabConfiguration
 import com.browser.minnal.browser.ui.UiConfiguration
 import com.browser.minnal.browser.menu.MenuSelection
 import com.browser.minnal.browser.view.BackgroundTabFlyInAnimation
+import com.browser.minnal.rating.RatingPromptDialog
+import com.browser.minnal.rating.RatingPromptHelper
 import com.browser.minnal.browser.view.ViewDelegate
 import com.browser.minnal.view.RadialFabMenu
 import com.browser.minnal.view.RadialFabMenuItem
@@ -196,6 +198,12 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
     @Inject
     internal lateinit var activeTimeInterstitialController: ActiveTimeInterstitialController
 
+    @Inject
+    internal lateinit var ratingPromptHelper: RatingPromptHelper
+
+    /** First [onResume] after a fresh launch (not return from background). */
+    private var ratingPromptColdStartResume = false
+
     /**
      * True if the activity is operating in incognito mode, false otherwise.
      */
@@ -215,6 +223,7 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ratingPromptColdStartResume = savedInstanceState == null
         if (savedInstanceState != null) {
             interstitialAccumulatedActiveMs = savedInstanceState.getLong(
                 STATE_INTERSTITIAL_ACCUMULATED_MS,
@@ -738,6 +747,9 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
 
     override fun onResume() {
         super.onResume()
+        val coldStartResume = ratingPromptColdStartResume
+        ratingPromptColdStartResume = false
+        presenter.onViewShown(isColdStartResume = coldStartResume)
         if (!isIncognito()) {
             activeTimeInterstitialController.onBrowserResumed(this) {
                 customView == null && !isFinishing
@@ -919,6 +931,65 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
             chipColor = defaultColor,
             chipStrokeColor = themeProvider.color(R.attr.iconColor),
         )
+    }
+
+    /**
+     * @see BrowserContract.View.showRatingPromptIfEligible
+     */
+    fun showRatingPromptIfEligible() {
+        if (isFinishing || isDestroyed || isIncognito()) {
+            presenter.onRatingPromptDismissed()
+            return
+        }
+        showRatingPromptWhenReady(retryCount = 0)
+    }
+
+    private fun showRatingPromptWhenReady(retryCount: Int) {
+        if (isFinishing || isDestroyed || isIncognito()) {
+            presenter.onRatingPromptDismissed()
+            return
+        }
+        if (!hasWindowFocus()) {
+            if (retryCount < 10) {
+                binding.root.postDelayed({ showRatingPromptWhenReady(retryCount + 1) }, 250L)
+            } else {
+                presenter.onRatingPromptDeferred()
+            }
+            return
+        }
+        binding.root.postDelayed({
+            if (isFinishing || isDestroyed || isIncognito()) {
+                presenter.onRatingPromptDismissed()
+                return@postDelayed
+            }
+            if (!hasWindowFocus()) {
+                if (retryCount < 10) {
+                    showRatingPromptWhenReady(retryCount + 1)
+                } else {
+                    presenter.onRatingPromptDeferred()
+                }
+                return@postDelayed
+            }
+            if (!ratingPromptHelper.shouldShowRatingPrompt()) {
+                presenter.onRatingPromptDismissed()
+                return@postDelayed
+            }
+            if (RatingPromptDialog.isShowing()) {
+                return@postDelayed
+            }
+            presenter.onRatingPromptShown()
+            RatingPromptDialog.show(
+                activity = this,
+                onRated = {
+                    ratingPromptHelper.markRated()
+                    presenter.onRatingPromptDismissed()
+                },
+                onLater = {
+                    ratingPromptHelper.snoozeUntilNextDay()
+                    presenter.onRatingPromptDismissed()
+                },
+            )
+        }, 150L)
     }
 
     private fun createGridTabsAdapter(): GridTabRecyclerViewAdapter =

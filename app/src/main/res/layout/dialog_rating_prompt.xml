@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/dialog_rating_background"
+    android:gravity="center_horizontal"
+    android:orientation="vertical"
+    android:paddingStart="24dp"
+    android:paddingTop="28dp"
+    android:paddingEnd="24dp"
+    android:paddingBottom="20dp">
+
+    <ImageView
+        android:id="@+id/rating_app_icon"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:contentDescription="@null"
+        android:src="@mipmap/ic_launcher" />
+
+    <TextView
+        android:id="@+id/rating_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:fontFamily="sans-serif-medium"
+        android:gravity="center"
+        android:text="@string/rating_prompt_title"
+        android:textColor="?android:attr/textColorPrimary"
+        android:textSize="22sp" />
+
+    <TextView
+        android:id="@+id/rating_message"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center"
+        android:lineSpacingExtra="2dp"
+        android:text="@string/rating_prompt_message"
+        android:textColor="?android:attr/textColorSecondary"
+        android:textSize="15sp" />
+
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/rating_rate_button"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:background="@drawable/rating_rate_button_bg"
+        android:text="@string/rating_prompt_rate"
+        android:textAllCaps="false"
+        android:textColor="@color/white" />
+
+    <TextView
+        android:id="@+id/rating_later_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:background="?attr/selectableItemBackground"
+        android:fontFamily="sans-serif-medium"
+        android:paddingStart="16dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="8dp"
+        android:text="@string/rating_prompt_later"
+        android:textColor="?android:attr/textColorSecondary"
+        android:textSize="14sp" />
+
+</LinearLayout>

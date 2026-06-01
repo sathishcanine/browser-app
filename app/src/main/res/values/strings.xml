@@ -434,4 +434,10 @@
 
     <!-- Search -->
     <string name="search_insert_suggestion">Insert suggestion</string>
+
+    <!-- In-app rating prompt (Downloads → Home after a completed download) -->
+    <string name="rating_prompt_title">Enjoying Minnal Browser?</string>
+    <string name="rating_prompt_message">Your feedback helps us build a faster, safer browser for everyone.</string>
+    <string name="rating_prompt_rate">Rate on Google Play</string>
+    <string name="rating_prompt_later">Maybe later</string>
 </resources>

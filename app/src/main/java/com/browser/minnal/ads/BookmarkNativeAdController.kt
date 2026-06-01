@@ -17,6 +17,7 @@ import android.widget.FrameLayout
 import android.widget.ImageButton
 import androidx.core.view.isVisible
 import androidx.fragment.app.FragmentActivity
+import com.browser.minnal.rating.RatingPromptDialog
 
 /**
  * Native advanced ad strip (expand/collapse, optional close). Used for the bookmarks start page,
@@ -101,6 +102,9 @@ class BookmarkNativeAdController private constructor(
 
     private fun loadNativeAd() {
         if (loadAttemptedForThisVisit || !presenterWantsVisible || dismissedForThisVisit) {
+            return
+        }
+        if (RatingPromptDialog.isShowing()) {
             return
         }
         loadAttemptedForThisVisit = true

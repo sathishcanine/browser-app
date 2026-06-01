@@ -353,6 +353,15 @@ class UserPreferences @Inject constructor(
         0L
     )
 
+    /** Epoch millis when the app was first launched (for rating prompt day counting). */
+    var firstLaunchEpochMs by preferences.longPreference(FIRST_LAUNCH_EPOCH_MS, 0L)
+
+    /** User completed rating (opened Play Store from prompt). */
+    var ratingPromptCompleted by preferences.booleanPreference(RATING_PROMPT_COMPLETED, false)
+
+    /** Until this time, skip the rating prompt after "Maybe later". */
+    var ratingPromptSnoozedUntilMs by preferences.longPreference(RATING_PROMPT_SNOOZED_UNTIL_MS, 0L)
+
     /**
      * True after legacy default bookmarks (Lightning Change Log / Contact Me) were migrated to
      * Daily Thanthi and Dinamalar for this install.
@@ -450,6 +459,9 @@ private const val PREFER_EXTERNAL_APP_FOR_DOWNLOADS = "preferExternalAppForDownl
 private const val DISCOVER_FEED_ENABLED = "discoverFeedEnabled"
 private const val DEFAULT_BROWSER_PROMPT_SNOOZED_UNTIL = "defaultBrowserPromptSnoozedUntilMs"
 private const val LAST_DEFAULT_BROWSER_PROMPT_EPOCH_MS = "lastDefaultBrowserPromptEpochMs"
+private const val FIRST_LAUNCH_EPOCH_MS = "firstLaunchEpochMs"
+private const val RATING_PROMPT_COMPLETED = "ratingPromptCompleted"
+private const val RATING_PROMPT_SNOOZED_UNTIL_MS = "ratingPromptSnoozedUntilMs"
 private const val LEGACY_DEFAULT_BOOKMARKS_MIGRATED = "legacyDefaultBookmarksMigrated"
 private const val LEGACY_WIKIPEDIA_TO_BEHINDWOODS_MIGRATED = "legacyWikipediaToBehindwoodsMigrated"
 private const val LEGACY_GOOGLE_DUCKDUCKGO_TO_CRICKET_SITES_MIGRATED =
