@@ -45,6 +45,7 @@ import com.browser.minnal.databinding.BrowserActivityDesktopBinding
 import com.browser.minnal.databinding.BrowserActivityDrawerBinding
 import com.browser.minnal.databinding.BrowserBottomTabsBinding
 import com.browser.minnal.dialog.BrowserDialog
+import com.browser.minnal.dialog.DefaultBrowserPromptDialog
 import com.browser.minnal.dialog.DialogItem
 import com.browser.minnal.dialog.LightningDialogBuilder
 import com.browser.minnal.icon.TabCountView
@@ -1473,31 +1474,26 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         if (defaultBrowserPrompt?.isShowing == true) return
 
         val snoozeMs = DEFAULT_BROWSER_SNOOZE_MS
-        defaultBrowserPrompt = AlertDialog.Builder(this)
-            .setTitle(R.string.title_set_default_browser)
-            .setMessage(R.string.message_set_default_browser)
-            .setPositiveButton(R.string.action_set_as_default) { _, _ ->
+        defaultBrowserPrompt = DefaultBrowserPromptDialog.show(
+            activity = this,
+            onSetAsDefault = {
                 val intent = DefaultBrowserHelper.createDefaultBrowserSettingsIntent(this)
                 try {
                     defaultBrowserRoleLauncher.launch(intent)
                 } catch (_: Exception) {
                     DefaultBrowserHelper.launchDefaultBrowserFlow(this)
                 }
-            }
-            .setNegativeButton(R.string.action_not_now) { _, _ ->
+            },
+            onNotNow = {
                 userPreferences.defaultBrowserPromptSnoozedUntilMs = now + snoozeMs
-            }
-            .setNeutralButton(R.string.action_dont_ask_default_browser) { _, _ ->
-                userPreferences.suppressDefaultBrowserPrompt = true
-            }
-            .setOnDismissListener {
+            },
+            onDismiss = {
                 defaultBrowserPrompt = null
                 if (!DefaultBrowserHelper.isAppDefaultBrowser(this)) {
                     userPreferences.lastDefaultBrowserPromptEpochMs = System.currentTimeMillis()
                 }
-            }
-            .setCancelable(true)
-            .resizeAndShow() as AlertDialog
+            },
+        )
     }
 
     private companion object {
