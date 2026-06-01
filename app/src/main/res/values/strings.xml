@@ -299,6 +299,7 @@
     <string name="close_other_tabs">Close other tabs</string>
     <string name="fab_menu_toggle">Open menu</string>
     <string name="fab_menu_home">Home</string>
+    <string name="fab_menu_add_bookmark">Add to bookmarks</string>
     <string name="fab_menu_close_all_tabs">Close All Tabs</string>
     <string name="fab_menu_close_other_tabs">Close Other Tabs</string>
     <string name="fab_menu_clear_history">Clear All History</string>

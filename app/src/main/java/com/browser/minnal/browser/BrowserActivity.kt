@@ -490,6 +490,12 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
                 onClick = { presenter.onHomeClick() },
             ),
             RadialFabMenuItem(
+                iconRes = R.drawable.ic_action_star,
+                label = getString(R.string.fab_menu_add_bookmark),
+                contentDescription = getString(R.string.fab_menu_add_bookmark),
+                onClick = { presenter.onStarClick() },
+            ),
+            RadialFabMenuItem(
                 iconRes = R.drawable.ic_action_tabs,
                 label = getString(R.string.fab_menu_close_all_tabs),
                 contentDescription = getString(R.string.fab_menu_close_all_tabs),
@@ -611,6 +617,10 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
 
         uiLayout.addView(bottomChrome)
         addressBarContainer = bottomChrome
+
+        // Toolbar moved to bottom; hide the empty shell at the top (was causing a gray gap).
+        toolbarLayout.fitsSystemWindows = false
+        toolbarLayout.isVisible = false
     }
 
     private fun computeBottomToolbarInset(): Int {
