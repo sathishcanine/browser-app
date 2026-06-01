@@ -69,6 +69,10 @@ class BrowserStateAdapter(private val browserActivity: BrowserActivity) : Browse
         tabs.takeIf { it != currentTabs }?.let(browserActivity::renderTabs)
     }
 
+    override fun playBackgroundTabAddedAnimation() {
+        browserActivity.playBackgroundTabAddedAnimation()
+    }
+
     override fun showAddBookmarkDialog(title: String, url: String, folders: List<String>) {
         browserActivity.showAddBookmarkDialog(title, url, folders)
     }

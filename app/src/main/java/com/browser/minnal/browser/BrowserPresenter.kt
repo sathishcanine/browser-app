@@ -330,6 +330,7 @@ class BrowserPresenter @Inject constructor(
                     tabInitializer = initializer,
                     tabType = TabModel.Type.POP_UP,
                 ).observeOn(mainScheduler).subscribe { popupTab ->
+                    onBackgroundTabOpened()
                     if (promoteToOpener) {
                         compositeDisposable += popupTab.promoteToOpenerRequests()
                             .take(1)
@@ -511,8 +512,14 @@ class BrowserPresenter @Inject constructor(
             .subscribe { tab ->
                 if (shouldSelect) {
                     selectTab(model.selectTab(tab.id))
+                } else {
+                    onBackgroundTabOpened()
                 }
             }
+    }
+
+    private fun onBackgroundTabOpened() {
+        view?.playBackgroundTabAddedAnimation()
     }
 
     private fun List<TabViewState>.tabIndexForId(id: Int?): Int =

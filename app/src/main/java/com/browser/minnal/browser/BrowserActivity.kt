@@ -26,6 +26,7 @@ import com.browser.minnal.browser.ui.BookmarkConfiguration
 import com.browser.minnal.browser.ui.TabConfiguration
 import com.browser.minnal.browser.ui.UiConfiguration
 import com.browser.minnal.browser.menu.MenuSelection
+import com.browser.minnal.browser.view.BackgroundTabFlyInAnimation
 import com.browser.minnal.browser.view.ViewDelegate
 import com.browser.minnal.view.RadialFabMenu
 import com.browser.minnal.view.RadialFabMenuItem
@@ -902,6 +903,22 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * @see BrowserContract.View.playBackgroundTabAddedAnimation
+     */
+    fun playBackgroundTabAddedAnimation() {
+        if (!binding.tabCountView.isVisible) {
+            return
+        }
+        BackgroundTabFlyInAnimation.play(
+            overlay = binding.root,
+            contentView = binding.contentFrame,
+            tabSwitcherView = binding.homeButton,
+            chipColor = defaultColor,
+            chipStrokeColor = themeProvider.color(R.attr.iconColor),
+        )
     }
 
     private fun createGridTabsAdapter(): GridTabRecyclerViewAdapter =

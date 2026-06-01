@@ -37,6 +37,11 @@ interface BrowserContract {
         fun renderTabs(tabs: List<TabViewState>)
 
         /**
+         * Play a short fly-in toward the tab switcher when a tab is opened in the background.
+         */
+        fun playBackgroundTabAddedAnimation()
+
+        /**
          * Show the dialog to add a bookmark for the current page.
          *
          * @param title The current title of the page.
