@@ -402,6 +402,9 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         }
 
         presenter.onViewAttached(BrowserStateAdapter(this))
+        if (!isIncognito()) {
+            setupRadialFabMenu()
+        }
 
         val suggestionsAdapter = SuggestionsAdapter(this, isIncognito = isIncognito()).apply {
             onSuggestionInsertClick = {
@@ -475,6 +478,7 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
             }
         }
         radialFabMenu.setMenuItems(buildRadialFabMenuItems())
+        binding.root.post { radialFabMenu.showMainFab(animate = false) }
     }
 
     private fun buildRadialFabMenuItems(): List<RadialFabMenuItem> {
@@ -490,6 +494,12 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
                 label = getString(R.string.fab_menu_close_all_tabs),
                 contentDescription = getString(R.string.fab_menu_close_all_tabs),
                 onClick = { showCloseAllTabsDialog() },
+            ),
+            RadialFabMenuItem(
+                iconRes = R.drawable.ic_action_close,
+                label = getString(R.string.fab_menu_close_other_tabs),
+                contentDescription = getString(R.string.fab_menu_close_other_tabs),
+                onClick = { showCloseOtherTabsDialog() },
             ),
             RadialFabMenuItem(
                 iconRes = R.drawable.ic_history,
@@ -639,6 +649,19 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
             message = R.string.dialog_close_all_tabs,
             positiveButton = DialogItem(title = R.string.action_yes) {
                 presenter.closeAllTabs()
+            },
+            negativeButton = DialogItem(title = R.string.action_no) {},
+            onCancel = {},
+        )
+    }
+
+    private fun showCloseOtherTabsDialog() {
+        BrowserDialog.showPositiveNegativeDialog(
+            activity = this,
+            title = R.string.fab_menu_close_other_tabs,
+            message = R.string.dialog_close_other_tabs,
+            positiveButton = DialogItem(title = R.string.action_yes) {
+                presenter.closeOtherTabs()
             },
             negativeButton = DialogItem(title = R.string.action_no) {},
             onCancel = {},

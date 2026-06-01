@@ -864,6 +864,11 @@ class BrowserPresenter @Inject constructor(
         closeAllTabsAndGoHome()
     }
 
+    fun closeOtherTabs() {
+        val currentId = currentTab?.id ?: return
+        onCloseBrowserEvent(currentId, BrowserContract.CloseTabEvent.CLOSE_OTHERS)
+    }
+
     private fun closeAllTabsAndGoHome() {
         compositeDisposable += model.deleteAllTabs()
             .observeOn(mainScheduler)

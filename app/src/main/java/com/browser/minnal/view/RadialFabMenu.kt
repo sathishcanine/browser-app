@@ -13,10 +13,12 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.View.MeasureSpec
 import android.view.animation.DecelerateInterpolator
+import android.view.animation.OvershootInterpolator
 import android.widget.FrameLayout
+import android.widget.ImageView
 import androidx.annotation.DrawableRes
+import androidx.core.view.ViewCompat
 import androidx.core.view.isVisible
-import com.google.android.material.floatingactionbutton.FloatingActionButton
 
 data class RadialFabMenuItem(
     @DrawableRes val iconRes: Int,
@@ -37,6 +39,8 @@ class RadialFabMenu @JvmOverloads constructor(
     private val fabMargin = resources.getDimensionPixelSize(R.dimen.radial_fab_margin)
     private val fabSize = resources.getDimensionPixelSize(R.dimen.radial_fab_size)
     private val itemIconSize = resources.getDimensionPixelSize(R.dimen.radial_fab_item_size)
+    private val itemStackSpacing = resources.getDimensionPixelSize(R.dimen.radial_fab_stack_spacing)
+    private val itemGapAboveFab = resources.getDimensionPixelSize(R.dimen.radial_fab_item_gap)
 
     val isMenuExpanded: Boolean
         get() = isExpanded
@@ -46,9 +50,12 @@ class RadialFabMenu @JvmOverloads constructor(
     private var fabBottomMargin = fabMargin
     private var fabCenterX = 0f
     private var fabCenterY = 0f
+    private var isMainFabHidden = true
+    private var mainFabShowAnimator: ObjectAnimator? = null
+    private var mainFabHideAnimator: ObjectAnimator? = null
 
     private val scrim = View(context).apply {
-        setBackgroundColor(0x66000000)
+        setBackgroundColor(0x99000000.toInt())
         alpha = 0f
         isVisible = false
         setOnClickListener { collapse() }
@@ -61,19 +68,12 @@ class RadialFabMenu @JvmOverloads constructor(
         isVisible = false
     }
 
-    private val mainFab = FloatingActionButton(context).apply {
-        setImageResource(R.drawable.ic_action_plus)
-        backgroundTintList = context.getColorStateList(R.color.accent_color)
-        imageTintList = context.getColorStateList(R.color.white)
-        customSize = fabSize
-        elevation = resources.getDimension(R.dimen.material_grid_unit) * 2
-        setOnClickListener {
-            if (isExpanded) {
-                collapse()
-            } else {
-                expand()
-            }
-        }
+    private val mainFab = ImageView(context).apply {
+        setImageResource(R.drawable.fab_icon)
+        scaleType = ImageView.ScaleType.FIT_CENTER
+        contentDescription = context.getString(R.string.fab_menu_toggle)
+        setOnClickListener { onMainFabClick() }
+        ViewCompat.setElevation(this, resources.getDimension(R.dimen.material_grid_unit) * 2)
     }
 
     private val menuItemViews = mutableListOf<View>()
@@ -86,18 +86,99 @@ class RadialFabMenu @JvmOverloads constructor(
         addView(menuItemsContainer, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(
             mainFab,
-            LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply {
+            LayoutParams(fabSize, fabSize).apply {
                 gravity = Gravity.BOTTOM or Gravity.END
                 setMargins(fabMargin, fabMargin, fabMargin, fabMargin)
             },
         )
+        mainFab.alpha = 1f
+        mainFab.translationY = 0f
+        isMainFabHidden = false
     }
+
+    /** Slide the main FAB in from below (e.g. after scroll or on first layout). */
+    fun showMainFab(animate: Boolean = true) {
+        if (!isMainFabHidden && mainFab.translationY == 0f && mainFab.alpha >= 1f) {
+            return
+        }
+        if (isExpanded) {
+            return
+        }
+        isMainFabHidden = false
+        mainFabHideAnimator?.cancel()
+        mainFab.isVisible = true
+        mainFab.bringToFront()
+        if (animate && mainFab.translationY < 1f) {
+            mainFab.translationY = mainFabHiddenTranslationY()
+        }
+        if (animate) {
+            mainFabShowAnimator?.cancel()
+            mainFabShowAnimator = ObjectAnimator.ofFloat(mainFab, TRANSLATION_Y, mainFab.translationY, 0f).apply {
+                duration = FAB_VISIBILITY_ANIMATION_DURATION
+                interpolator = DecelerateInterpolator()
+                start()
+            }
+            mainFab.animate()
+                .alpha(1f)
+                .setDuration(FAB_VISIBILITY_ANIMATION_DURATION)
+                .start()
+        } else {
+            mainFab.translationY = 0f
+            mainFab.alpha = 1f
+        }
+    }
+
+    /** Slide the main FAB off-screen (e.g. while scrolling down in fullscreen). */
+    fun hideMainFab(animate: Boolean = true) {
+        if (isMainFabHidden || isExpanded) {
+            return
+        }
+        collapse()
+        isMainFabHidden = true
+        mainFabShowAnimator?.cancel()
+        val hiddenTranslationY = mainFabHiddenTranslationY()
+        if (animate) {
+            mainFabHideAnimator?.cancel()
+            mainFabHideAnimator = ObjectAnimator.ofFloat(
+                mainFab,
+                TRANSLATION_Y,
+                mainFab.translationY,
+                hiddenTranslationY,
+            ).apply {
+                duration = FAB_VISIBILITY_ANIMATION_DURATION
+                interpolator = DecelerateInterpolator()
+                start()
+            }
+            mainFab.animate()
+                .alpha(0f)
+                .setDuration(FAB_VISIBILITY_ANIMATION_DURATION)
+                .start()
+        } else {
+            applyMainFabHiddenState(animate = false)
+        }
+    }
+
+    private fun applyMainFabHiddenState(animate: Boolean) {
+        if (animate) {
+            hideMainFab(animate = true)
+            return
+        }
+        mainFab.translationY = mainFabHiddenTranslationY()
+        mainFab.alpha = 0f
+        isMainFabHidden = true
+    }
+
+    private fun mainFabHiddenTranslationY(): Float =
+        (fabSize + fabBottomMargin + fabMargin).toFloat()
 
     fun setFabBottomInset(insetPx: Int) {
         fabBottomMargin = fabMargin + insetPx
         (mainFab.layoutParams as LayoutParams).bottomMargin = fabBottomMargin
         mainFab.requestLayout()
         updateFabCenter()
+        if (isMainFabHidden) {
+            mainFab.translationY = mainFabHiddenTranslationY()
+        }
         if (isExpanded) {
             repositionExpandedItems()
         }
@@ -113,6 +194,8 @@ class RadialFabMenu @JvmOverloads constructor(
             val binding = RadialFabMenuItemBinding.inflate(inflater, menuItemsContainer, false)
             binding.radialFabItemIcon.setImageResource(item.iconRes)
             binding.radialFabItemIcon.imageTintList = context.getColorStateList(R.color.white)
+            binding.radialFabItemIconContainer.backgroundTintList =
+                context.getColorStateList(R.color.accent_color)
             binding.radialFabItemLabel.text = item.label
             binding.root.contentDescription = item.contentDescription
             binding.root.elevation = resources.getDimension(R.dimen.material_grid_unit) * 2
@@ -135,7 +218,7 @@ class RadialFabMenu @JvmOverloads constructor(
             return
         }
         isExpanded = false
-        mainFab.setImageResource(R.drawable.ic_action_plus)
+        animateMainFabToggle(expanded = false)
 
         val animators = mutableListOf<Animator>()
         animators += ObjectAnimator.ofFloat(scrim, ALPHA, scrim.alpha, 0f).apply {
@@ -183,7 +266,7 @@ class RadialFabMenu @JvmOverloads constructor(
             return
         }
         isExpanded = true
-        mainFab.setImageResource(R.drawable.ic_action_close)
+        animateMainFabToggle(expanded = true)
 
         updateFabCenter()
         scrim.isVisible = true
@@ -267,19 +350,12 @@ class RadialFabMenu @JvmOverloads constructor(
             return emptyList()
         }
 
-        val stepX = resources.getDimension(R.dimen.radial_fab_step_x)
-        val stepY = resources.getDimension(R.dimen.radial_fab_step_y)
-        val homeOffsetX = fabSize + itemIconSize + fabMargin.toFloat()
-        val topLimit = paddingTop + fabMargin
-        val availableHeight = (fabCenterY - fabSize / 2f - fabMargin - topLimit).coerceAtLeast(stepY)
-        val rowStep = (availableHeight / count).coerceIn(stepY * 0.85f, stepY * 1.2f)
-
-        val horizontalFactors = listOf(0f, 0.15f, 0.55f, 0.25f, 0.05f)
+        val firstItemOffset =
+            fabSize / 2f + itemGapAboveFab + itemIconSize / 2f
 
         return (0 until count).map { index ->
-            val dx = -homeOffsetX - stepX * horizontalFactors.getOrElse(index) { 0.05f * index }
-            val dy = if (index == 0) 0f else -rowStep * index
-            fabCenterX + dx to fabCenterY + dy
+            val dy = -(firstItemOffset + index * itemStackSpacing.toFloat())
+            fabCenterX to fabCenterY + dy
         }
     }
 
@@ -297,10 +373,11 @@ class RadialFabMenu @JvmOverloads constructor(
         }
     }
 
-    /** Icon circle center (top of the vertical icon + label column). */
+    /** Icon circle center (right edge of the label + icon row). */
     private fun iconAnchorOffset(view: View): Pair<Float, Float> {
         val width = itemSize(view).first.toFloat()
-        return (width / 2f) to (itemIconSize / 2f)
+        val height = itemSize(view).second.toFloat()
+        return (width - itemIconSize / 2f) to (height / 2f)
     }
 
     private fun itemSize(view: View): Pair<Int, Int> {
@@ -310,8 +387,54 @@ class RadialFabMenu @JvmOverloads constructor(
         return width to height
     }
 
+    private fun onMainFabClick() {
+        val shouldExpand = !isExpanded
+        mainFab.animate().cancel()
+        mainFab.animate()
+            .scaleX(MAIN_FAB_PULSE_SCALE)
+            .scaleY(MAIN_FAB_PULSE_SCALE)
+            .setDuration(MAIN_FAB_PULSE_DURATION)
+            .withEndAction {
+                mainFab.animate()
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .setDuration(MAIN_FAB_PULSE_DURATION)
+                    .setInterpolator(OvershootInterpolator(1.6f))
+                    .withEndAction {
+                        if (shouldExpand) {
+                            expand()
+                        } else {
+                            collapse()
+                        }
+                    }
+                    .start()
+            }
+            .start()
+    }
+
+    private fun animateMainFabToggle(expanded: Boolean) {
+        val targetRotation = if (expanded) MAIN_FAB_EXPANDED_ROTATION else 0f
+        ObjectAnimator.ofFloat(mainFab, ROTATION, mainFab.rotation, targetRotation).apply {
+            duration = ANIMATION_DURATION
+            interpolator = OvershootInterpolator(1.2f)
+            start()
+        }
+        val targetScale = if (expanded) MAIN_FAB_EXPANDED_SCALE else 1f
+        mainFab.animate()
+            .scaleX(targetScale)
+            .scaleY(targetScale)
+            .setDuration(ANIMATION_DURATION)
+            .setInterpolator(DecelerateInterpolator())
+            .start()
+    }
+
     companion object {
         private const val ANIMATION_DURATION = 280L
         private const val STAGGER_DELAY = 45L
+        private const val FAB_VISIBILITY_ANIMATION_DURATION = 200L
+        private const val MAIN_FAB_PULSE_DURATION = 90L
+        private const val MAIN_FAB_PULSE_SCALE = 0.9f
+        private const val MAIN_FAB_EXPANDED_ROTATION = 45f
+        private const val MAIN_FAB_EXPANDED_SCALE = 1.06f
     }
 }

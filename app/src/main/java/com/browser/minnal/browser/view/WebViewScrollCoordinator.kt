@@ -43,7 +43,8 @@ class WebViewScrollCoordinator @Inject constructor(
     private var currentToggleListener: ToggleListener? = null
 
     /**
-     * Configure the [webView] to match its scrolling behavior with showing an hiding the toolbar.
+     * Configure the [webView] layout relative to the toolbar. The address bar stays visible;
+     * scroll no longer hides it.
      */
     fun configure(webView: WebView) {
         webView.setCompositeOnFocusChangeListener("keyboard") { v, hasFocus ->
@@ -67,7 +68,6 @@ class WebViewScrollCoordinator @Inject constructor(
 
                 toolbar.doOnLayout {
                     webView.translationY = toolbar.height.toFloat()
-                    coordinate(toolbar, webView)
                 }
             } else {
                 if (toolbar.parent != toolbarRoot) {

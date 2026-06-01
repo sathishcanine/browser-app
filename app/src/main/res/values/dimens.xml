@@ -30,12 +30,12 @@
     <dimen name="progress_bar_height">2dp</dimen>
 
     <dimen name="radial_fab_size">56dp</dimen>
-    <dimen name="radial_fab_item_size">40dp</dimen>
-    <dimen name="radial_fab_item_icon">20dp</dimen>
+    <dimen name="radial_fab_item_size">48dp</dimen>
+    <dimen name="radial_fab_item_icon">22dp</dimen>
+    <dimen name="radial_fab_item_gap">12dp</dimen>
     <dimen name="radial_fab_margin">16dp</dimen>
     <dimen name="radial_fab_extra_bottom_inset">16dp</dimen>
-    <dimen name="radial_fab_step_x">72dp</dimen>
-    <dimen name="radial_fab_step_y">60dp</dimen>
+    <dimen name="radial_fab_stack_spacing">56dp</dimen>
     <dimen name="bookmark_native_ad_header_height">40dp</dimen>
 
     <dimen name="tab_grid_spacing">5dp</dimen>
