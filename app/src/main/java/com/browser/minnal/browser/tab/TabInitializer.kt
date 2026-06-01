@@ -132,7 +132,7 @@ abstract class HtmlPageFactoryInitializer(
 
 /**
  * An initializer that sets the [WebView] as the target of the [resultMessage]. Used for
- * `target="_blank"` links.
+ * `target="_blank"` links and [android.webkit.WebChromeClient.onCreateWindow].
  */
 class ResultMessageInitializer(private val resultMessage: Message) : TabInitializer {
 
@@ -143,6 +143,15 @@ class ResultMessageInitializer(private val resultMessage: Message) : TabInitiali
     }
 
 }
+
+/**
+ * [onCreateWindow] request with metadata for routing ads vs user link targets.
+ */
+class CreateWindowInitializer(
+    private val resultMessage: Message,
+    val isUserGesture: Boolean,
+    val promoteNonAdToOpener: Boolean,
+) : TabInitializer by ResultMessageInitializer(resultMessage)
 
 /**
  * An initializer that restores the [WebView] state using the [bundle].

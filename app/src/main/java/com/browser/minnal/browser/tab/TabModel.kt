@@ -231,6 +231,11 @@ interface TabModel {
     fun createWindowRequests(): Observable<TabInitializer>
 
     /**
+     * Emits when a user-tapped popup tab should load [String] on the tab that opened it instead.
+     */
+    fun promoteToOpenerRequests(): Observable<String>
+
+    /**
      * Emits http(s) URLs that should load in a new background tab (ad / intent redirects).
      */
     fun backgroundTabUrlRequests(): Observable<String>

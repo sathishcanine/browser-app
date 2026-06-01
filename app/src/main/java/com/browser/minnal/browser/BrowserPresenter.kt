@@ -13,6 +13,7 @@ import com.browser.minnal.browser.keys.KeyCombo
 import com.browser.minnal.browser.menu.MenuSelection
 import com.browser.minnal.browser.notification.TabCountNotifier
 import com.browser.minnal.browser.search.SearchBoxModel
+import com.browser.minnal.browser.tab.CreateWindowInitializer
 import com.browser.minnal.browser.tab.DownloadPageInitializer
 import com.browser.minnal.browser.tab.HistoryPageInitializer
 import com.browser.minnal.browser.tab.HomePageInitializer
@@ -167,7 +168,10 @@ class BrowserPresenter @Inject constructor(
             .observeOn(mainScheduler)
             .switchIfEmpty(model.createTab(homePageInitializer).map(::listOf))
             .subscribe { list ->
-                selectTab(model.selectTab(list.last().id))
+                val tabToSelect = model.restoredSelectedTabId()
+                    ?.takeIf { savedId -> list.any { it.id == savedId } }
+                    ?: list.last().id
+                selectTab(model.selectTab(tabToSelect))
             }
 
         // When the user accepts a download (the in-built downloader pushes a PENDING state right
@@ -314,16 +318,30 @@ class BrowserPresenter @Inject constructor(
 
         tabDisposable += tab.createWindowRequests()
             .subscribeOn(mainScheduler)
-            .subscribeBy {
+            .subscribeBy { initializer ->
                 if (!popupTabGate.shouldAllowPopupWindow()) {
                     return@subscribeBy
                 }
                 popupTabGate.recordPopupWindowOpened()
-                createNewTabAndSelect(
-                    tabInitializer = it,
-                    shouldSelect = false,
-                    tabType = TabModel.Type.POP_UP
-                )
+                val openerTab = tab
+                val promoteToOpener =
+                    (initializer as? CreateWindowInitializer)?.promoteNonAdToOpener == true
+                compositeDisposable += model.createTab(
+                    tabInitializer = initializer,
+                    tabType = TabModel.Type.POP_UP,
+                ).observeOn(mainScheduler).subscribe { popupTab ->
+                    if (promoteToOpener) {
+                        compositeDisposable += popupTab.promoteToOpenerRequests()
+                            .take(1)
+                            .subscribeBy { url ->
+                                openerTab.loadUrl(url)
+                                val popupIndex = tabListState.tabIndexForId(popupTab.id)
+                                if (popupIndex >= 0) {
+                                    onTabClose(popupIndex)
+                                }
+                            }
+                    }
+                }
             }
 
         tabDisposable += tab.backgroundTabUrlRequests()

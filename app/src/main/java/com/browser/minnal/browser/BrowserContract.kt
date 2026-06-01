@@ -223,6 +223,11 @@ interface BrowserContract {
         fun freeze()
 
         /**
+         * Tab id that was in the foreground when tabs were last frozen, if any.
+         */
+        fun restoredSelectedTabId(): Int?
+
+        /**
          * Clean all permanent stored content.
          */
         fun clean()

@@ -244,12 +244,18 @@ class UrlHandler @Inject constructor(
         if (isPlayStoreHttpUrl(url)) {
             return false
         }
-        if (isLikelyAdRedirectUrl(url)) {
-            return true
+        return isLikelyAdRedirectUrl(url)
+    }
+
+    /**
+     * User-tapped [target="_blank"] / window.open content should stay on the opener tab; only
+     * obvious ad URLs remain in the temporary popup tab.
+     */
+    fun shouldPromotePopupNavigationToOpener(url: String): Boolean {
+        if (!url.isHttpOrHttps()) {
+            return false
         }
-        val currentHost = currentPageUrl?.toUri()?.host?.lowercase()
-        val newHost = url.toUri().host?.lowercase()
-        return currentHost != null && newHost != null && currentHost != newHost
+        return !isLikelyAdRedirectUrl(url)
     }
 
     private fun isLikelyAdRedirectUrl(url: String): Boolean {

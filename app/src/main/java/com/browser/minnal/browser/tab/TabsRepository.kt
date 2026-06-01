@@ -113,11 +113,14 @@ class TabsRepository @Inject constructor(
 
     override fun tabsListChanges(): Observable<List<TabModel>> = tabsListObservable.hide()
 
+    private var restoredSelectedTabId: Int? = null
+
     override fun initializeTabs(): Maybe<List<TabModel>> =
         Single.fromCallable(bundleStore::retrieve)
             .subscribeOn(diskScheduler)
             .observeOn(mainScheduler)
-            .flatMapObservable { Observable.fromIterable(it) }
+            .doOnSuccess { restoredSelectedTabId = it.selectedTabId }
+            .flatMapObservable { Observable.fromIterable(it.initializers) }
             .flatMapSingle { createTabUnsafe(it, tabType = TabModel.Type.NORMAL) }
             .concatWith(Maybe.fromCallable { initialUrl }.map {
                 if (it.isFileUrl()) {
@@ -133,14 +136,21 @@ class TabsRepository @Inject constructor(
             }
 
     override fun markAllNonEphemeral() {
-        tabsList.forEach { it.tabType = TabModel.Type.NORMAL }
+        tabsList.forEach { tab ->
+            if (tab.tabType == TabModel.Type.EPHEMERAL) {
+                tab.tabType = TabModel.Type.NORMAL
+            }
+        }
     }
 
     override fun freeze() {
         if (userPreferences.restoreLostTabsEnabled) {
-            bundleStore.save(tabsList)
+            val tabsToSave = tabsList.filter { it.tabType != TabModel.Type.POP_UP }
+            bundleStore.save(tabsToSave, selectedTab?.id)
         }
     }
+
+    override fun restoredSelectedTabId(): Int? = restoredSelectedTabId
 
     override fun clean() {
         bundleStore.deleteAll()

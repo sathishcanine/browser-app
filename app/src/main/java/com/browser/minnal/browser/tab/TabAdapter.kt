@@ -87,6 +87,7 @@ class TabAdapter @AssistedInject constructor(
     private var toggleDesktop: Boolean = false
     private val downloadsSubject = PublishSubject.create<PendingDownload>()
     private val backgroundTabUrlSubject = PublishSubject.create<String>()
+    private val promoteToOpenerSubject = PublishSubject.create<String>()
     private val focusObservable = BehaviorSubject.createDefault(false)
 
     private var previewGeneratedTime = System.currentTimeMillis()
@@ -148,6 +149,10 @@ class TabAdapter @AssistedInject constructor(
 
     init {
         tabWebViewClient.onRequestNewTab = { url -> backgroundTabUrlSubject.onNext(url) }
+        if (tabInitializer is CreateWindowInitializer && tabInitializer.promoteNonAdToOpener) {
+            tabWebViewClient.promoteNonAdNavigationToOpener = true
+            tabWebViewClient.onPromoteNavigationToOpener = promoteToOpenerSubject::onNext
+        }
         if (tabInitializer !is FreezableBundleInitializer) {
             loadFromInitializer(tabInitializer)
         }
@@ -311,6 +316,9 @@ class TabAdapter @AssistedInject constructor(
 
     override fun createWindowRequests(): Observable<TabInitializer> =
         tabWebChromeClient.createWindowObservable.hide()
+
+    override fun promoteToOpenerRequests(): Observable<String> =
+        promoteToOpenerSubject.hide()
 
     override fun backgroundTabUrlRequests(): Observable<String> =
         backgroundTabUrlSubject.hide()

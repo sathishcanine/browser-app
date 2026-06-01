@@ -43,7 +43,8 @@ class TabWebChromeClient @Inject constructor(
     private val faviconModel: FaviconModel,
     @DiskScheduler private val diskScheduler: Scheduler,
     private val userPreferences: UserPreferences,
-    private val webRtcPermissionsModel: WebRtcPermissionsModel
+    private val webRtcPermissionsModel: WebRtcPermissionsModel,
+    private val popupTabGate: PopupTabGate,
 ) : WebChromeClient(), WebRtcPermissionsView {
 
     private val defaultColor = activity.color(R.color.primary_color)
@@ -124,8 +125,25 @@ class TabWebChromeClient @Inject constructor(
         isUserGesture: Boolean,
         resultMsg: Message
     ): Boolean {
-        createWindowObservable.onNext(ResultMessageInitializer(resultMsg))
+        // Second+ window.open from one tap (e.g. content after an ad) loads in the current tab.
+        if (isUserGesture && !popupTabGate.shouldAllowPopupWindow()) {
+            assignWindowToWebView(view, resultMsg)
+            return true
+        }
+        createWindowObservable.onNext(
+            CreateWindowInitializer(
+                resultMessage = resultMsg,
+                isUserGesture = isUserGesture,
+                promoteNonAdToOpener = isUserGesture,
+            ),
+        )
         return true
+    }
+
+    private fun assignWindowToWebView(view: WebView, resultMsg: Message) {
+        resultMsg.apply {
+            (obj as WebView.WebViewTransport).webView = view
+        }.sendToTarget()
     }
 
     override fun onCloseWindow(window: WebView) {

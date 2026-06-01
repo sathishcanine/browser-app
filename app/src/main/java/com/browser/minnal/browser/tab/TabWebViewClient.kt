@@ -67,6 +67,16 @@ class TabWebViewClient @AssistedInject constructor(
     var onRequestNewTab: ((String) -> Unit)? = null
 
     /**
+     * When true, the first non-ad navigation in this popup tab is moved to the opener tab.
+     */
+    var promoteNonAdNavigationToOpener: Boolean = false
+
+    /**
+     * Invoked with the URL to load on the tab that opened this popup.
+     */
+    var onPromoteNavigationToOpener: ((String) -> Unit)? = null
+
+    /**
      * Emits changes to the current URL.
      */
     val urlObservable: PublishSubject<String> = PublishSubject.create()
@@ -107,6 +117,9 @@ class TabWebViewClient @AssistedInject constructor(
             adBlocker.isAd(requestUrl)
 
     override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+        if (maybePromotePopupNavigation(view, url)) {
+            return
+        }
         if (urlHandler.interceptDocumentNavigation(view, url)) {
             return
         }
@@ -213,8 +226,24 @@ class TabWebViewClient @AssistedInject constructor(
         }
     }
 
-    private fun delegateUrlLoading(view: WebView, url: String, isForMainFrame: Boolean, hasGesture: Boolean): Boolean =
-        urlHandler.shouldOverrideLoading(
+    private fun maybePromotePopupNavigation(view: WebView, url: String): Boolean {
+        if (!promoteNonAdNavigationToOpener) {
+            return false
+        }
+        if (!urlHandler.shouldPromotePopupNavigationToOpener(url)) {
+            return false
+        }
+        promoteNonAdNavigationToOpener = false
+        view.stopLoading()
+        onPromoteNavigationToOpener?.invoke(url)
+        return true
+    }
+
+    private fun delegateUrlLoading(view: WebView, url: String, isForMainFrame: Boolean, hasGesture: Boolean): Boolean {
+        if (maybePromotePopupNavigation(view, url)) {
+            return true
+        }
+        return urlHandler.shouldOverrideLoading(
             view = view,
             url = url,
             headers = headers,
@@ -223,6 +252,7 @@ class TabWebViewClient @AssistedInject constructor(
             currentPageUrl = view.url,
             requestNewTab = onRequestNewTab,
         )
+    }
 
     @Deprecated("Deprecated in Java")
     override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {

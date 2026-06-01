@@ -9,14 +9,14 @@ import com.browser.minnal.browser.tab.TabInitializer
 interface BundleStore {
 
     /**
-     * Save the tab data for the list of [tabs].
+     * Save the tab data for the list of [tabs] and the tab the user had in the foreground.
      */
-    fun save(tabs: List<TabModel>)
+    fun save(tabs: List<TabModel>, selectedTabId: Int?)
 
     /**
-     * Synchronously previously stored tab data.
+     * Synchronously read previously stored tab data.
      */
-    fun retrieve(): List<TabInitializer>
+    fun retrieve(): RestoredTabBundle
 
     /**
      * Synchronously delete all stored tabs.
