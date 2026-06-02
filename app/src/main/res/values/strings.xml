@@ -72,10 +72,10 @@
     <string name="title_search_engine">Search engine</string>
     <string name="action_ok">OK</string>
     <string name="dialog_download">Do you want to download this file? (%1$s)</string>
-    <string name="dialog_rewarded_download_message">Watch an ad to unlock superfast download for this file.</string>
-    <string name="action_watch_ad_superfast_download">Watch Ad to Superfast Download</string>
-    <string name="action_cancel_download">No, Cancel Download</string>
-    <string name="message_rewarded_download_ad_unavailable">Ad is not available right now. Try again in a moment.</string>
+    <string name="dialog_rewarded_download_message">Download will start automatically after the ad is completed. It will be a superfast download.</string>
+    <string name="action_continue_for_downloading">Continue for Downloading</string>
+    <string name="dialog_rewarded_download_loading">Loading ad…</string>
+    <string name="message_rewarded_download_proceeding_without_ad">Ad unavailable. Starting download without ad.</string>
     <string name="unknown_size">Unknown size</string>
     <string name="action_cancel">Cancel</string>
     <string name="title_warning">Warning</string>

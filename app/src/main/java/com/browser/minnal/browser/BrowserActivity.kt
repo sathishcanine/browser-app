@@ -4,6 +4,8 @@ import com.browser.minnal.AppTheme
 import com.browser.minnal.R
 import com.browser.minnal.ThemableBrowserActivity
 import com.browser.minnal.ads.ActiveTimeInterstitialController
+import com.browser.minnal.ads.AppOpenAdManager
+import com.browser.minnal.ads.HomeScreenNativeAdScheduler
 import com.browser.minnal.ads.BookmarkNativeAdController
 import com.browser.minnal.animation.AnimationUtils
 import com.browser.minnal.browser.bookmark.BookmarkRecyclerViewAdapter
@@ -156,7 +158,11 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
 
     private val defaultBrowserRoleLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) { /* system UI completed; no follow-up required */ }
+    ) {
+        if (!isIncognito()) {
+            appOpenAdManager.setDefaultBrowserSystemFlowActive(false)
+        }
+    }
 
     private val playImmediateUpdateLauncher = registerForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult(),
@@ -200,7 +206,15 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
     internal lateinit var activeTimeInterstitialController: ActiveTimeInterstitialController
 
     @Inject
+    internal lateinit var appOpenAdManager: AppOpenAdManager
+
+    @Inject
+    internal lateinit var homeScreenNativeAdScheduler: HomeScreenNativeAdScheduler
+
+    @Inject
     internal lateinit var ratingPromptHelper: RatingPromptHelper
+
+    private var wantsBookmarkNativeAdStrip = false
 
     /** First [onResume] after a fresh launch (not return from background). */
     private var ratingPromptColdStartResume = false
@@ -400,6 +414,9 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
                 this,
                 binding.downloadsNativeAdStrip,
             )
+            homeScreenNativeAdScheduler.setListener { eligible ->
+                applyBookmarkNativeAdStripVisibility(eligible)
+            }
         }
 
         presenter.onViewAttached(BrowserStateAdapter(this))
@@ -742,8 +759,17 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
                 openPlayStoreForForceUpdate()
             }
         }
+        dialog.setOnDismissListener {
+            forceUpdateDialog = null
+            if (!isIncognito()) {
+                appOpenAdManager.setForceUpdateDialogVisible(false)
+            }
+        }
         dialog.show()
         forceUpdateDialog = dialog
+        if (!isIncognito()) {
+            appOpenAdManager.setForceUpdateDialogVisible(true)
+        }
     }
 
     private fun startImmediatePlayUpdateFlow() {
@@ -808,6 +834,12 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
     }
 
     override fun onDestroy() {
+        if (!isIncognito()) {
+            appOpenAdManager.setDefaultBrowserPromptVisible(false)
+            appOpenAdManager.setDefaultBrowserSystemFlowActive(false)
+            appOpenAdManager.setForceUpdateDialogVisible(false)
+            homeScreenNativeAdScheduler.destroy()
+        }
         defaultBrowserPrompt?.dismiss()
         defaultBrowserPrompt = null
         forceUpdateDialog?.dismiss()
@@ -919,7 +951,12 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
             }
         }
         viewState.showBookmarkNativeAdStrip?.let { show ->
-            bookmarkNativeAdController?.onPresenterShowBookmarkNativeAd(show)
+            wantsBookmarkNativeAdStrip = show
+            if (isIncognito()) {
+                bookmarkNativeAdController?.onPresenterShowBookmarkNativeAd(false)
+            } else {
+                homeScreenNativeAdScheduler.setBookmarkHomeVisible(show)
+            }
         }
         viewState.showDownloadsNativeAdStrip?.let { show ->
             downloadsNativeAdController?.onPresenterShowBookmarkNativeAd(show)
@@ -1017,10 +1054,12 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
                 onRated = {
                     ratingPromptHelper.markRated()
                     presenter.onRatingPromptDismissed()
+                    appOpenAdManager.notifyBlockingOverlayDismissed()
                 },
                 onLater = {
                     ratingPromptHelper.snoozeUntilNextDay()
                     presenter.onRatingPromptDismissed()
+                    appOpenAdManager.notifyBlockingOverlayDismissed()
                 },
             )
         }, 150L)
@@ -1462,6 +1501,12 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         }
     }
 
+    private fun applyBookmarkNativeAdStripVisibility(schedulerEligible: Boolean) {
+        bookmarkNativeAdController?.onPresenterShowBookmarkNativeAd(
+            wantsBookmarkNativeAdStrip && schedulerEligible,
+        )
+    }
+
     private fun maybeShowDefaultBrowserPrompt() {
         if (isIncognito()) return
         if (userPreferences.suppressDefaultBrowserPrompt) return
@@ -1474,14 +1519,18 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         if (defaultBrowserPrompt?.isShowing == true) return
 
         val snoozeMs = DEFAULT_BROWSER_SNOOZE_MS
+        appOpenAdManager.setDefaultBrowserPromptVisible(true)
         defaultBrowserPrompt = DefaultBrowserPromptDialog.show(
             activity = this,
             onSetAsDefault = {
                 val intent = DefaultBrowserHelper.createDefaultBrowserSettingsIntent(this)
+                appOpenAdManager.setDefaultBrowserSystemFlowActive(true)
+                appOpenAdManager.setDefaultBrowserPromptVisible(false)
                 try {
                     defaultBrowserRoleLauncher.launch(intent)
                 } catch (_: Exception) {
                     DefaultBrowserHelper.launchDefaultBrowserFlow(this)
+                    appOpenAdManager.setDefaultBrowserSystemFlowActive(false)
                 }
             },
             onNotNow = {
@@ -1489,6 +1538,7 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
             },
             onDismiss = {
                 defaultBrowserPrompt = null
+                appOpenAdManager.setDefaultBrowserPromptVisible(false)
                 if (!DefaultBrowserHelper.isAppDefaultBrowser(this)) {
                     userPreferences.lastDefaultBrowserPromptEpochMs = System.currentTimeMillis()
                 }

@@ -23,48 +23,64 @@ class RewardedDownloadAdHelper @Inject constructor(
 
     private var rewardedAd: RewardedAd? = null
     private var isLoading = false
+    private val pendingLoadListeners = mutableListOf<LoadListener>()
 
     fun preload(activity: FragmentActivity) {
         if (rewardedAd != null || isLoading) {
             return
         }
-        loadAd(activity)
+        startLoad(activity, listener = null)
     }
 
     /**
-     * @param onRewarded User completed the ad and should receive the superfast download.
+     * @param onLoadingChanged `true` while fetching the ad; `false` when fetch ends or ad is ready to show.
+     * @param onRewarded User completed the ad; start the superfast download.
+     * @param onProceedWithoutAd Ad could not be loaded or shown; download without ad.
      * @param onDismissedWithoutReward User closed the ad before earning the reward.
-     * @param onUnavailable Ad could not be loaded or shown.
      */
     fun show(
         activity: FragmentActivity,
+        onLoadingChanged: (Boolean) -> Unit,
         onRewarded: () -> Unit,
+        onProceedWithoutAd: () -> Unit,
         onDismissedWithoutReward: () -> Unit,
-        onUnavailable: () -> Unit,
     ) {
         val cached = rewardedAd
         if (cached != null) {
-            present(activity, cached, onRewarded, onDismissedWithoutReward, onUnavailable)
+            rewardedAd = null
+            onLoadingChanged(false)
+            present(activity, cached, onRewarded, onDismissedWithoutReward, onProceedWithoutAd)
             return
         }
+
+        onLoadingChanged(true)
+        val listener = object : LoadListener {
+            override fun onLoaded(ad: RewardedAd) {
+                onLoadingChanged(false)
+                present(activity, ad, onRewarded, onDismissedWithoutReward, onProceedWithoutAd)
+            }
+
+            override fun onFailed() {
+                onLoadingChanged(false)
+                onProceedWithoutAd()
+            }
+        }
+
         if (isLoading) {
-            onUnavailable()
+            pendingLoadListeners.add(listener)
             return
         }
-        loadAd(
-            activity,
-            onLoaded = { ad ->
-                present(activity, ad, onRewarded, onDismissedWithoutReward, onUnavailable)
-            },
-            onFailed = onUnavailable,
-        )
+
+        startLoad(activity, listener)
     }
 
-    private fun loadAd(
-        activity: FragmentActivity,
-        onLoaded: ((RewardedAd) -> Unit)? = null,
-        onFailed: (() -> Unit)? = null,
-    ) {
+    private fun startLoad(activity: FragmentActivity, listener: LoadListener?) {
+        if (listener != null) {
+            pendingLoadListeners.add(listener)
+        }
+        if (isLoading) {
+            return
+        }
         isLoading = true
         RewardedAd.load(
             activity,
@@ -73,14 +89,24 @@ class RewardedDownloadAdHelper @Inject constructor(
             object : RewardedAdLoadCallback() {
                 override fun onAdLoaded(ad: RewardedAd) {
                     isLoading = false
-                    rewardedAd = ad
-                    onLoaded?.invoke(ad)
+                    val listeners = pendingLoadListeners.toList()
+                    pendingLoadListeners.clear()
+                    if (listeners.isEmpty()) {
+                        rewardedAd = ad
+                        return
+                    }
+                    listeners.forEach { it.onLoaded(ad) }
                 }
 
                 override fun onAdFailedToLoad(error: LoadAdError) {
                     isLoading = false
                     logger.log(TAG, "Rewarded download ad failed to load: ${error.message}")
-                    onFailed?.invoke()
+                    val listeners = pendingLoadListeners.toList()
+                    pendingLoadListeners.clear()
+                    if (listeners.isEmpty()) {
+                        return
+                    }
+                    listeners.forEach { it.onFailed() }
                 }
             },
         )
@@ -91,14 +117,13 @@ class RewardedDownloadAdHelper @Inject constructor(
         ad: RewardedAd,
         onRewarded: () -> Unit,
         onDismissedWithoutReward: () -> Unit,
-        onUnavailable: () -> Unit,
+        onProceedWithoutAd: () -> Unit,
     ) {
         var rewardGranted = false
         interstitialAdHelper.beginSuppress()
         ad.fullScreenContentCallback = object : FullScreenContentCallback() {
             override fun onAdDismissedFullScreenContent() {
                 interstitialAdHelper.endSuppress()
-                rewardedAd = null
                 preload(activity)
                 if (rewardGranted) {
                     onRewarded()
@@ -109,14 +134,12 @@ class RewardedDownloadAdHelper @Inject constructor(
 
             override fun onAdFailedToShowFullScreenContent(error: AdError) {
                 interstitialAdHelper.endSuppress()
-                rewardedAd = null
                 logger.log(TAG, "Rewarded download ad failed to show: ${error.message}")
-                onUnavailable()
+                preload(activity)
+                onProceedWithoutAd()
             }
 
-            override fun onAdShowedFullScreenContent() {
-                rewardedAd = null
-            }
+            override fun onAdShowedFullScreenContent() = Unit
         }
         runCatching {
             ad.show(activity) {
@@ -125,8 +148,13 @@ class RewardedDownloadAdHelper @Inject constructor(
         }.onFailure {
             interstitialAdHelper.endSuppress()
             logger.log(TAG, "Rewarded download ad show threw", it)
-            onUnavailable()
+            onProceedWithoutAd()
         }
+    }
+
+    private interface LoadListener {
+        fun onLoaded(ad: RewardedAd)
+        fun onFailed()
     }
 
     companion object {

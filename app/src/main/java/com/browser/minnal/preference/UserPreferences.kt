@@ -356,6 +356,15 @@ class UserPreferences @Inject constructor(
     /** Epoch millis when the app was first launched (for rating prompt day counting). */
     var firstLaunchEpochMs by preferences.longPreference(FIRST_LAUNCH_EPOCH_MS, 0L)
 
+    /**
+     * False until the user leaves the app after their first foreground session.
+     * While false, app-open ads are not loaded or shown (no network requests).
+     */
+    var appOpenAdFirstSessionCompleted by preferences.booleanPreference(
+        APP_OPEN_AD_FIRST_SESSION_COMPLETED,
+        false,
+    )
+
     /** User completed rating (opened Play Store from prompt). */
     var ratingPromptCompleted by preferences.booleanPreference(RATING_PROMPT_COMPLETED, false)
 
@@ -460,6 +469,7 @@ private const val DISCOVER_FEED_ENABLED = "discoverFeedEnabled"
 private const val DEFAULT_BROWSER_PROMPT_SNOOZED_UNTIL = "defaultBrowserPromptSnoozedUntilMs"
 private const val LAST_DEFAULT_BROWSER_PROMPT_EPOCH_MS = "lastDefaultBrowserPromptEpochMs"
 private const val FIRST_LAUNCH_EPOCH_MS = "firstLaunchEpochMs"
+private const val APP_OPEN_AD_FIRST_SESSION_COMPLETED = "appOpenAdFirstSessionCompleted"
 private const val RATING_PROMPT_COMPLETED = "ratingPromptCompleted"
 private const val RATING_PROMPT_SNOOZED_UNTIL_MS = "ratingPromptSnoozedUntilMs"
 private const val LEGACY_DEFAULT_BOOKMARKS_MIGRATED = "legacyDefaultBookmarksMigrated"

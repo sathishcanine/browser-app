@@ -112,43 +112,86 @@ class DownloadPermissionsHelper @Inject constructor(
         contentLength: Long,
     ) {
         val fileName = resolveDisplayFileName(url, contentDisposition, mimeType)
-        val dialogClickListener = DialogInterface.OnClickListener { _, which: Int ->
-            when (which) {
-                DialogInterface.BUTTON_POSITIVE -> {
-                    rewardedDownloadAdHelper.show(
-                        activity = activity,
-                        onRewarded = {
-                            startDownload(
-                                activity = activity,
-                                url = url,
-                                userAgent = userAgent,
-                                contentDisposition = contentDisposition,
-                                mimeType = mimeType,
-                                contentLength = contentLength,
-                            )
-                        },
-                        onDismissedWithoutReward = {
-                            logger.log(TAG, "Rewarded download ad dismissed without reward: $fileName")
-                        },
-                        onUnavailable = {
-                            activity.snackbar(R.string.message_rewarded_download_ad_unavailable)
-                        },
-                    )
-                }
-
-                DialogInterface.BUTTON_NEGATIVE -> {
-                    logger.log(TAG, "Rewarded download cancelled: $fileName")
-                }
+        val downloadParams = DownloadParams(
+            url = url,
+            userAgent = userAgent,
+            contentDisposition = contentDisposition,
+            mimeType = mimeType,
+            contentLength = contentLength,
+        )
+        val dialogClickListener = DialogInterface.OnClickListener { dialog, which: Int ->
+            if (which != DialogInterface.BUTTON_POSITIVE) {
+                return@OnClickListener
             }
+            dialog.dismiss()
+            showRewardedAdThenDownload(activity, fileName, downloadParams)
         }
         val dialog: Dialog = AlertDialog.Builder(activity)
             .setTitle(fileName)
             .setMessage(R.string.dialog_rewarded_download_message)
-            .setPositiveButton(R.string.action_watch_ad_superfast_download, dialogClickListener)
-            .setNegativeButton(R.string.action_cancel_download, dialogClickListener)
+            .setPositiveButton(R.string.action_continue_for_downloading, dialogClickListener)
+            .setCancelable(true)
             .show()
         setDialogSize(activity, dialog)
         logger.log(TAG, "Rewarded download gate: $fileName")
+    }
+
+    private fun showRewardedAdThenDownload(
+        activity: FragmentActivity,
+        fileName: String,
+        params: DownloadParams,
+    ) {
+        var loadingDialog: Dialog? = null
+        rewardedDownloadAdHelper.show(
+            activity = activity,
+            onLoadingChanged = { loading ->
+                if (loading) {
+                    if (loadingDialog?.isShowing != true) {
+                        loadingDialog = AlertDialog.Builder(activity)
+                            .setView(R.layout.dialog_loading_ad)
+                            .setCancelable(false)
+                            .show()
+                        setDialogSize(activity, loadingDialog!!)
+                    }
+                } else {
+                    loadingDialog?.dismiss()
+                    loadingDialog = null
+                }
+            },
+            onRewarded = {
+                startDownload(activity, params)
+            },
+            onProceedWithoutAd = {
+                logger.log(TAG, "Rewarded download ad unavailable; proceeding without ad: $fileName")
+                activity.snackbar(R.string.message_rewarded_download_proceeding_without_ad)
+                startDownload(activity, params)
+            },
+            onDismissedWithoutReward = {
+                logger.log(TAG, "Rewarded download ad dismissed without reward: $fileName")
+            },
+        )
+    }
+
+    private data class DownloadParams(
+        val url: String,
+        val userAgent: String?,
+        val contentDisposition: String?,
+        val mimeType: String?,
+        val contentLength: Long,
+    )
+
+    private fun startDownload(
+        activity: FragmentActivity,
+        params: DownloadParams,
+    ) {
+        startDownload(
+            activity = activity,
+            url = params.url,
+            userAgent = params.userAgent,
+            contentDisposition = params.contentDisposition,
+            mimeType = params.mimeType,
+            contentLength = params.contentLength,
+        )
     }
 
     private fun showStandardDownloadConfirmation(
