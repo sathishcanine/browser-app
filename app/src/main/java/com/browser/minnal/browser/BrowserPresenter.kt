@@ -157,6 +157,12 @@ class BrowserPresenter @Inject constructor(
      */
     private var suppressBookmarkNativeAdAfterHistoryBack = false
 
+    /**
+     * Tab to restore when the user backs out of a downloads page opened in a new tab (e.g. after
+     * starting a download on another tab).
+     */
+    private var tabIdToRestoreAfterDownloads: Int? = null
+
     private val compositeDisposable = CompositeDisposable()
     private val allTabsDisposable = CompositeDisposable()
     private var tabDisposable: CompositeDisposable = CompositeDisposable()
@@ -222,6 +228,7 @@ class BrowserPresenter @Inject constructor(
             .observeOn(mainScheduler)
             .subscribeBy { _ ->
                 if (currentTab?.url?.isDownloadsUrl() != true) {
+                    tabIdToRestoreAfterDownloads = currentTab?.id
                     createNewTabAndSelect(downloadPageInitializer, shouldSelect = true)
                 }
             }
@@ -541,10 +548,15 @@ class BrowserPresenter @Inject constructor(
                 shouldSelect = true
             )
 
-            MenuSelection.DOWNLOADS -> createNewTabAndSelect(
-                downloadPageInitializer,
-                shouldSelect = true
-            )
+            MenuSelection.DOWNLOADS -> {
+                if (currentTab?.url?.isDownloadsUrl() != true) {
+                    tabIdToRestoreAfterDownloads = currentTab?.id
+                }
+                createNewTabAndSelect(
+                    downloadPageInitializer,
+                    shouldSelect = true,
+                )
+            }
 
             MenuSelection.FIND -> view?.showFindInPageDialog()
             MenuSelection.COPY_LINK -> currentTab?.url?.takeIf { !it.isSpecialUrl() }
@@ -789,8 +801,10 @@ class BrowserPresenter @Inject constructor(
                     view?.showCloseBrowserDialog(it)
                 }
 
-                currentTab?.url?.isDownloadsUrl() == true ||
-                    currentTab?.url?.isBookmarkUrl() == true ||
+                currentTab?.url?.isDownloadsUrl() == true ->
+                    navigateBackFromDownloadsPage()
+
+                currentTab?.url?.isBookmarkUrl() == true ||
                     currentTab?.url?.isHistoryUrl() == true ->
                     loadHomePageWithoutBookmarkNativeAdStrip()
 
@@ -842,6 +856,27 @@ class BrowserPresenter @Inject constructor(
     private fun loadHomePageWithoutBookmarkNativeAdStrip() {
         suppressBookmarkNativeAdAfterHistoryBack = true
         currentTab?.loadFromInitializer(homePageInitializer)
+    }
+
+    private fun navigateBackFromDownloadsPage() {
+        val restoreTabId = tabIdToRestoreAfterDownloads
+        val downloadsTabId = currentTab?.id
+        tabIdToRestoreAfterDownloads = null
+
+        if (
+            restoreTabId != null &&
+            downloadsTabId != null &&
+            restoreTabId != downloadsTabId &&
+            tabListState.any { it.id == restoreTabId }
+        ) {
+            selectTab(model.selectTab(restoreTabId))
+            compositeDisposable += model.deleteTab(downloadsTabId)
+                .observeOn(mainScheduler)
+                .subscribe()
+            return
+        }
+
+        loadHomePageWithoutBookmarkNativeAdStrip()
     }
 
     private fun isHomeScreenUrl(url: String): Boolean =
