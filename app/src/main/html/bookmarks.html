@@ -99,6 +99,42 @@
         margin: 10px;
     }
 
+    .box.add-shortcut {
+        cursor: pointer;
+        border: 1px dashed rgba(128, 128, 128, 0.45);
+        background-color: transparent;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    .box.add-shortcut:active {
+        background-color: var(--box-bg);
+    }
+
+    .add-shortcut-inner {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 8px;
+        width: 130px;
+    }
+
+    .add-shortcut-plus {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        font-size: 20px;
+        line-height: 1;
+        font-weight: 300;
+        opacity: 0.75;
+        flex-shrink: 0;
+    }
+
+    .add-shortcut-label {
+        opacity: 0.85;
+    }
+
     .google-logo {
         font-size: 48px;
         font-weight: 400;
@@ -399,6 +435,13 @@
 </section>
 
 <script type="text/javascript">
+        function lightningAddShortcut() {
+            if (typeof MinnalHome !== "undefined" && MinnalHome.isAvailable()) {
+                try { MinnalHome.addShortcut(); } catch (_) {}
+            }
+            return false;
+        }
+
         function lightningBookmarkSearch(ev) {
             var el = document.getElementById("bookmark_search_input");
             var q = el && el.value ? el.value.trim() : "";

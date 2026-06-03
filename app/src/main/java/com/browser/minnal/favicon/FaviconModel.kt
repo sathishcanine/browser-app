@@ -112,7 +112,7 @@ class FaviconModel @Inject constructor(
          * The folder where favicons are cached.
          */
         fun faviconCacheFolder(application: Application): File =
-            File(application.cacheDir, "favicon-cache")
+            File(application.cacheDir, "favicon-cache").also { it.mkdirs() }
 
         private const val TAG = "FaviconModel"
 

@@ -48,6 +48,7 @@ class BookmarkPageFactory @Inject constructor(
 ) : HtmlPageFactory {
 
     private val title = application.getString(R.string.action_bookmarks)
+    private val addShortcutLabel = application.getString(R.string.home_add_shortcut)
     private val folderIconFile by lazy {
         File(FaviconModel.faviconCacheFolder(application), FOLDER_ICON)
     }
@@ -92,7 +93,7 @@ class BookmarkPageFactory @Inject constructor(
                     Pair(folder, bookmarksAndFolders.flatten().map { it.asViewModel() })
                 }
         }
-        .map { (folder, viewModels) -> Pair(folder, construct(viewModels)) }
+        .map { (folder, viewModels) -> Pair(folder, construct(viewModels, folder == Bookmark.Folder.Root)) }
         .subscribeOn(databaseScheduler)
         .observeOn(diskScheduler)
         .doOnNext { (folder, content) ->
@@ -115,12 +116,22 @@ class BookmarkPageFactory @Inject constructor(
             "$FILE${createBookmarkPage(null)}"
         }
 
-    private fun cacheIcon(icon: Bitmap, file: File) = FileOutputStream(file).safeUse {
-        icon.compress(Bitmap.CompressFormat.PNG, 100, it)
-        icon.recycle()
+    private fun cacheIcon(icon: Bitmap, file: File) {
+        try {
+            file.parentFile?.mkdirs()
+            FileOutputStream(file).safeUse {
+                icon.compress(Bitmap.CompressFormat.PNG, 100, it)
+            }
+        } catch (_: Exception) {
+            // Best-effort; bookmark page can still load with a missing tile.
+        } finally {
+            if (!icon.isRecycled) {
+                icon.recycle()
+            }
+        }
     }
 
-    private fun construct(list: List<BookmarkViewModel>): String {
+    private fun construct(list: List<BookmarkViewModel>, showAddShortcut: Boolean): String {
         val searchEngine = searchEngineProvider.provideSearchEngine()
         val queryUrlForScript = searchEngine.queryUrl.replace("&", "\\u0026")
         return parse(bookmarkPageReader.provideHtml()) andBuild {
@@ -141,6 +152,26 @@ class BookmarkPageFactory @Inject constructor(
                             tag("img") { attr("src", it.iconUrl) }
                             id("title") { appendText(it.title) }
                         })
+                    }
+                    if (showAddShortcut) {
+                        appendChild(
+                            org.jsoup.nodes.Element("div").apply {
+                                attr("class", "box add-shortcut")
+                                attr("role", "button")
+                                attr("tabindex", "0")
+                                attr("onclick", "return lightningAddShortcut()")
+                                appendElement("div").attr("class", "margin").appendElement("div")
+                                    .attr("class", "box-content add-shortcut-inner").apply {
+                                        appendElement("span")
+                                            .attr("class", "add-shortcut-plus")
+                                            .attr("aria-hidden", "true")
+                                            .text("+")
+                                        appendElement("p")
+                                            .attr("class", "ellipses add-shortcut-label")
+                                            .text(addShortcutLabel)
+                                    }
+                            }
+                        )
                     }
                 }
                 tag("script") {

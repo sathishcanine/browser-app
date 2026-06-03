@@ -24,8 +24,22 @@ import javax.inject.Inject
 class OnboardingActivity : AppCompatActivity() {
 
     companion object {
+        /**
+         * True for a brand-new install that has not finished onboarding.
+         *
+         * [UserPreferences.firstLaunchEpochMs] is also checked so upgrades from builds before
+         * onboarding (which already recorded install time for the rating prompt) skip the carousel
+         * without treating them as a fresh install.
+         */
         fun shouldShow(userPreferences: UserPreferences): Boolean =
             !userPreferences.onboardingCompleted && userPreferences.firstLaunchEpochMs == 0L
+
+        /** Persists onboarding completion for installs that predated the onboarding feature. */
+        fun markLegacyOnboardingCompleteIfNeeded(userPreferences: UserPreferences) {
+            if (!userPreferences.onboardingCompleted && userPreferences.firstLaunchEpochMs != 0L) {
+                userPreferences.onboardingCompleted = true
+            }
+        }
     }
 
     @Inject
@@ -45,6 +59,8 @@ class OnboardingActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         injector.inject(this)
         if (!shouldShow(userPreferences)) {
+            markLegacyOnboardingCompleteIfNeeded(userPreferences)
+            super.onCreate(savedInstanceState)
             launchBrowserAndFinish()
             return
         }

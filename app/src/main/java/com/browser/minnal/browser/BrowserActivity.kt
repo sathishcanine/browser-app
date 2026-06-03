@@ -1,7 +1,9 @@
 package com.browser.minnal.browser
 
 import com.browser.minnal.AppTheme
+import com.browser.minnal.DefaultBrowserActivity
 import com.browser.minnal.R
+import com.browser.minnal.onboarding.OnboardingActivity
 import com.browser.minnal.ThemableBrowserActivity
 import com.browser.minnal.ads.ActiveTimeInterstitialController
 import com.browser.minnal.ads.AppOpenAdManager
@@ -139,6 +141,9 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
 
     private var interstitialAccumulatedActiveMs = 0L
 
+    /** False when [DefaultBrowserActivity] redirects to onboarding before browser DI/UI setup. */
+    private var isBrowserUiInitialized = false
+
     private var bottomTabsBinding: BrowserBottomTabsBinding? = null
     private var addressBarContainer: ConstraintLayout? = null
     private var tabGridTabCount: TabCountView? = null
@@ -238,6 +243,11 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (this is DefaultBrowserActivity && DefaultBrowserActivity.takePendingOnboardingRedirect()) {
+            startActivity(Intent(this, OnboardingActivity::class.java))
+            finish()
+            return
+        }
         ratingPromptColdStartResume = savedInstanceState == null
         if (savedInstanceState != null) {
             interstitialAccumulatedActiveMs = savedInstanceState.getLong(
@@ -490,6 +500,7 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         if (savedInstanceState == null) {
             scheduleForceUpdateRemoteConfigCheck()
         }
+        isBrowserUiInitialized = true
     }
 
     private fun setupRadialFabMenu() {
@@ -848,6 +859,9 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (!isBrowserUiInitialized) {
+            return
+        }
         val coldStartResume = ratingPromptColdStartResume
         ratingPromptColdStartResume = false
         presenter.onViewShown(isColdStartResume = coldStartResume)
@@ -871,34 +885,42 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
 
     override fun onWindowVisibleToUserAfterResume() {
         super.onWindowVisibleToUserAfterResume()
+        if (!isBrowserUiInitialized) {
+            return
+        }
         maybeShowDefaultBrowserPrompt()
     }
 
     override fun onDestroy() {
-        if (!isIncognito()) {
-            appOpenAdManager.setDefaultBrowserPromptVisible(false)
-            appOpenAdManager.setDefaultBrowserSystemFlowActive(false)
-            appOpenAdManager.setForceUpdateDialogVisible(false)
-            homeScreenNativeAdScheduler.destroy()
+        if (isBrowserUiInitialized) {
+            if (!isIncognito()) {
+                appOpenAdManager.setDefaultBrowserPromptVisible(false)
+                appOpenAdManager.setDefaultBrowserSystemFlowActive(false)
+                appOpenAdManager.setForceUpdateDialogVisible(false)
+                homeScreenNativeAdScheduler.destroy()
+            }
+            defaultBrowserPrompt?.dismiss()
+            defaultBrowserPrompt = null
+            forceUpdateDialog?.dismiss()
+            forceUpdateDialog = null
+            bookmarkNativeAdController?.destroy()
+            bookmarkNativeAdController = null
+            downloadsNativeAdController?.destroy()
+            downloadsNativeAdController = null
+            presenter.onViewDetached()
         }
-        defaultBrowserPrompt?.dismiss()
-        defaultBrowserPrompt = null
-        forceUpdateDialog?.dismiss()
-        forceUpdateDialog = null
-        bookmarkNativeAdController?.destroy()
-        bookmarkNativeAdController = null
-        downloadsNativeAdController?.destroy()
-        downloadsNativeAdController = null
-        presenter.onViewDetached()
         super.onDestroy()
     }
 
     override fun onPause() {
-        if (!isIncognito()) {
-            interstitialAccumulatedActiveMs = activeTimeInterstitialController.pauseAndGetAccumulatedMs()
+        if (isBrowserUiInitialized) {
+            if (!isIncognito()) {
+                interstitialAccumulatedActiveMs =
+                    activeTimeInterstitialController.pauseAndGetAccumulatedMs()
+            }
+            presenter.onViewHidden()
         }
         super.onPause()
-        presenter.onViewHidden()
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {

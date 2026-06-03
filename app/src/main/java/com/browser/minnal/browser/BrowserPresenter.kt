@@ -440,6 +440,10 @@ class BrowserPresenter @Inject constructor(
                 )
             }
 
+        tabDisposable += tab.addShortcutRequests()
+            .subscribeOn(mainScheduler)
+            .subscribeBy { onHomePageAddShortcutClick() }
+
         tabDisposable += tab.closeWindowRequests()
             .subscribeOn(mainScheduler)
             .subscribeBy { onTabClose(tabListState.indexOfCurrentTab()) }
@@ -964,9 +968,10 @@ class BrowserPresenter @Inject constructor(
                     compositeDisposable += bookmarkPageFactory.buildPage()
                         .subscribeOn(diskScheduler)
                         .observeOn(mainScheduler)
-                        .subscribeBy {
-                            currentTab?.reload()
-                        }
+                        .subscribeBy(
+                            onSuccess = { currentTab?.reload() },
+                            onError = { currentTab?.reload() },
+                        )
 
                 currentUrl.isDownloadsUrl() ->
                     currentTab?.loadFromInitializer(downloadPageInitializer)
@@ -1221,6 +1226,19 @@ class BrowserPresenter @Inject constructor(
             }
     }
 
+    fun onHomePageAddShortcutClick() {
+        compositeDisposable += bookmarkRepository.getFolderNames()
+            .subscribeOn(databaseScheduler)
+            .observeOn(mainScheduler)
+            .subscribeBy {
+                view?.showAddBookmarkDialog(
+                    title = "",
+                    url = "",
+                    folders = it
+                )
+            }
+    }
+
     /**
      * Call when the user confirms the details for adding a bookmark.
      *
@@ -1241,6 +1259,9 @@ class BrowserPresenter @Inject constructor(
             .observeOn(mainScheduler)
             .subscribeBy { list ->
                 this.view?.updateState(viewState.copy(bookmarks = list))
+                if (currentTab?.url?.isBookmarkUrl() == true) {
+                    reload()
+                }
             }
     }
 

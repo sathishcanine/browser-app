@@ -2,6 +2,7 @@ package com.browser.minnal.browser.tab
 
 import com.browser.minnal.download.manager.DownloadsBridge
 import com.browser.minnal.download.manager.MinnalDownloadManager
+import com.browser.minnal.html.homepage.HomePageBridge
 import com.browser.minnal.news.NewsBridge
 import com.browser.minnal.news.NewsRepository
 import com.browser.minnal.browser.di.DiskScheduler
@@ -87,6 +88,7 @@ class TabAdapter @AssistedInject constructor(
     private var toggleDesktop: Boolean = false
     private val downloadsSubject = PublishSubject.create<PendingDownload>()
     private val backgroundTabUrlSubject = PublishSubject.create<String>()
+    private val addShortcutSubject = PublishSubject.create<Unit>()
     private val promoteToOpenerSubject = PublishSubject.create<String>()
     private val focusObservable = BehaviorSubject.createDefault(false)
 
@@ -117,6 +119,10 @@ class TabAdapter @AssistedInject constructor(
             addJavascriptInterface(
                 NewsBridge(this, newsRepository, userPreferences),
                 NewsBridge.NAME
+            )
+            addJavascriptInterface(
+                HomePageBridge(this) { addShortcutSubject.onNext(Unit) },
+                HomePageBridge.NAME
             )
             setDownloadListener { url, userAgent, contentDisposition, mimetype, contentLength ->
                 downloadsSubject.onNext(
@@ -322,6 +328,9 @@ class TabAdapter @AssistedInject constructor(
 
     override fun backgroundTabUrlRequests(): Observable<String> =
         backgroundTabUrlSubject.hide()
+
+    override fun addShortcutRequests(): Observable<Unit> =
+        addShortcutSubject.hide()
 
     override fun closeWindowRequests(): Observable<Unit> =
         tabWebChromeClient.closeWindowObservable.hide()

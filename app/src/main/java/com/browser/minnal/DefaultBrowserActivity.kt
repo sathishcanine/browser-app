@@ -10,11 +10,10 @@ import android.os.Bundle
  * The default browsing experience.
  */
 class DefaultBrowserActivity : BrowserActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         if (savedInstanceState == null && shouldShowOnboarding()) {
-            startActivity(Intent(this, OnboardingActivity::class.java))
-            finish()
-            return
+            pendingOnboardingRedirect = true
         }
         super.onCreate(savedInstanceState)
     }
@@ -28,5 +27,18 @@ class DefaultBrowserActivity : BrowserActivity() {
     private fun shouldShowOnboarding(): Boolean {
         injector.inject(this)
         return OnboardingActivity.shouldShow(userPreferences)
+    }
+
+    companion object {
+        @Volatile
+        private var pendingOnboardingRedirect = false
+
+        internal fun takePendingOnboardingRedirect(): Boolean {
+            if (!pendingOnboardingRedirect) {
+                return false
+            }
+            pendingOnboardingRedirect = false
+            return true
+        }
     }
 }

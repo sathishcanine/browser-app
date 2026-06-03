@@ -241,6 +241,11 @@ interface TabModel {
     fun backgroundTabUrlRequests(): Observable<String>
 
     /**
+     * Emits when the user taps the add-shortcut tile on the bookmarks home page.
+     */
+    fun addShortcutRequests(): Observable<Unit>
+
+    /**
      * Emits requests by the browser to automatically close the current tab.
      */
     fun closeWindowRequests(): Observable<Unit>

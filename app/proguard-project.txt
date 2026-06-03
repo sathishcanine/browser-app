@@ -144,6 +144,9 @@
 -keepclassmembers class com.browser.minnal.news.NewsBridge {
     @android.webkit.JavascriptInterface <methods>;
 }
+-keepclassmembers class com.browser.minnal.html.homepage.HomePageBridge {
+    @android.webkit.JavascriptInterface <methods>;
+}
 
 # WorkManager default factory instantiates workers by reflection on this constructor.
 -keep class com.browser.minnal.download.manager.DownloadWorker {
