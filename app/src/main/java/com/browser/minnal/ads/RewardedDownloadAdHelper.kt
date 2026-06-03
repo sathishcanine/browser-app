@@ -8,12 +8,15 @@ import com.google.android.gms.ads.FullScreenContentCallback
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.rewarded.RewardedAd
 import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
+import com.google.android.gms.ads.rewardedinterstitial.RewardedInterstitialAd
+import com.google.android.gms.ads.rewardedinterstitial.RewardedInterstitialAdLoadCallback
 import androidx.fragment.app.FragmentActivity
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
  * Loads and presents a rewarded ad before partner CDN downloads (cld./cds. hosts).
+ * Falls back to a rewarded interstitial, then allows download without an ad.
  */
 @Singleton
 class RewardedDownloadAdHelper @Inject constructor(
@@ -49,7 +52,12 @@ class RewardedDownloadAdHelper @Inject constructor(
         if (cached != null) {
             rewardedAd = null
             onLoadingChanged(false)
-            present(activity, cached, onRewarded, onDismissedWithoutReward, onProceedWithoutAd)
+            presentRewarded(
+                activity,
+                cached,
+                onRewarded,
+                onDismissedWithoutReward,
+            ) { tryRewardedInterstitial(activity, onRewarded, onDismissedWithoutReward, onProceedWithoutAd) }
             return
         }
 
@@ -57,12 +65,22 @@ class RewardedDownloadAdHelper @Inject constructor(
         val listener = object : LoadListener {
             override fun onLoaded(ad: RewardedAd) {
                 onLoadingChanged(false)
-                present(activity, ad, onRewarded, onDismissedWithoutReward, onProceedWithoutAd)
+                presentRewarded(
+                    activity,
+                    ad,
+                    onRewarded,
+                    onDismissedWithoutReward,
+                ) { tryRewardedInterstitial(activity, onRewarded, onDismissedWithoutReward, onProceedWithoutAd) }
             }
 
             override fun onFailed() {
-                onLoadingChanged(false)
-                onProceedWithoutAd()
+                tryRewardedInterstitial(
+                    activity,
+                    onRewarded,
+                    onDismissedWithoutReward,
+                    onProceedWithoutAd,
+                    onLoadingChanged = onLoadingChanged,
+                )
             }
         }
 
@@ -112,12 +130,45 @@ class RewardedDownloadAdHelper @Inject constructor(
         )
     }
 
-    private fun present(
+    private fun tryRewardedInterstitial(
+        activity: FragmentActivity,
+        onRewarded: () -> Unit,
+        onDismissedWithoutReward: () -> Unit,
+        onProceedWithoutAd: () -> Unit,
+        onLoadingChanged: ((Boolean) -> Unit)? = null,
+    ) {
+        onLoadingChanged?.invoke(true)
+        RewardedInterstitialAd.load(
+            activity,
+            BuildConfig.REWARDED_INTERSTITIAL_DOWNLOAD_AD,
+            AdRequest.Builder().build(),
+            object : RewardedInterstitialAdLoadCallback() {
+                override fun onAdLoaded(ad: RewardedInterstitialAd) {
+                    onLoadingChanged?.invoke(false)
+                    presentRewardedInterstitial(
+                        activity,
+                        ad,
+                        onRewarded,
+                        onDismissedWithoutReward,
+                        onProceedWithoutAd,
+                    )
+                }
+
+                override fun onAdFailedToLoad(error: LoadAdError) {
+                    onLoadingChanged?.invoke(false)
+                    logger.log(TAG, "Rewarded interstitial download ad failed to load: ${error.message}")
+                    onProceedWithoutAd()
+                }
+            },
+        )
+    }
+
+    private fun presentRewarded(
         activity: FragmentActivity,
         ad: RewardedAd,
         onRewarded: () -> Unit,
         onDismissedWithoutReward: () -> Unit,
-        onProceedWithoutAd: () -> Unit,
+        onRewardedFailed: () -> Unit,
     ) {
         var rewardGranted = false
         interstitialAdHelper.beginSuppress()
@@ -136,7 +187,7 @@ class RewardedDownloadAdHelper @Inject constructor(
                 interstitialAdHelper.endSuppress()
                 logger.log(TAG, "Rewarded download ad failed to show: ${error.message}")
                 preload(activity)
-                onProceedWithoutAd()
+                onRewardedFailed()
             }
 
             override fun onAdShowedFullScreenContent() = Unit
@@ -148,6 +199,44 @@ class RewardedDownloadAdHelper @Inject constructor(
         }.onFailure {
             interstitialAdHelper.endSuppress()
             logger.log(TAG, "Rewarded download ad show threw", it)
+            onRewardedFailed()
+        }
+    }
+
+    private fun presentRewardedInterstitial(
+        activity: FragmentActivity,
+        ad: RewardedInterstitialAd,
+        onRewarded: () -> Unit,
+        onDismissedWithoutReward: () -> Unit,
+        onProceedWithoutAd: () -> Unit,
+    ) {
+        var rewardGranted = false
+        interstitialAdHelper.beginSuppress()
+        ad.fullScreenContentCallback = object : FullScreenContentCallback() {
+            override fun onAdDismissedFullScreenContent() {
+                interstitialAdHelper.endSuppress()
+                if (rewardGranted) {
+                    onRewarded()
+                } else {
+                    onDismissedWithoutReward()
+                }
+            }
+
+            override fun onAdFailedToShowFullScreenContent(error: AdError) {
+                interstitialAdHelper.endSuppress()
+                logger.log(TAG, "Rewarded interstitial download ad failed to show: ${error.message}")
+                onProceedWithoutAd()
+            }
+
+            override fun onAdShowedFullScreenContent() = Unit
+        }
+        runCatching {
+            ad.show(activity) {
+                rewardGranted = true
+            }
+        }.onFailure {
+            interstitialAdHelper.endSuppress()
+            logger.log(TAG, "Rewarded interstitial download ad show threw", it)
             onProceedWithoutAd()
         }
     }

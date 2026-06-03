@@ -955,7 +955,7 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
             if (isIncognito()) {
                 bookmarkNativeAdController?.onPresenterShowBookmarkNativeAd(false)
             } else {
-                homeScreenNativeAdScheduler.setBookmarkHomeVisible(show)
+                homeScreenNativeAdScheduler.setHostPageVisible(show)
             }
         }
         viewState.showDownloadsNativeAdStrip?.let { show ->

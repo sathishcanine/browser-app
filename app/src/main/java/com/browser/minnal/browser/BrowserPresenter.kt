@@ -151,13 +151,6 @@ class BrowserPresenter @Inject constructor(
     private var isCustomViewShowing = false
 
     /**
-     * When true, the bookmark start page does not show the in-page native ad strip until the user
-     * navigates explicitly (search, URL, opening a bookmark, new tab from +, etc.). Set when using
-     * WebView history back or when opening the home / start page via the home affordance.
-     */
-    private var suppressBookmarkNativeAdAfterHistoryBack = false
-
-    /**
      * Tab to restore when the user backs out of a downloads page opened in a new tab (e.g. after
      * starting a download on another tab).
      */
@@ -487,7 +480,6 @@ class BrowserPresenter @Inject constructor(
                 view?.showLocalFileBlockedDialog()
                 pendingAction = action
             } else {
-                clearBookmarkNativeAdHistoryBackSuppress()
                 createNewTabAndSelect(
                     tabInitializer = UrlInitializer(action.url),
                     shouldSelect = true,
@@ -507,7 +499,6 @@ class BrowserPresenter @Inject constructor(
     fun onConfirmOpenLocalFile(allow: Boolean) {
         if (allow) {
             pendingAction?.let {
-                clearBookmarkNativeAdHistoryBackSuppress()
                 createNewTabAndSelect(
                     tabInitializer = UrlInitializer(it.url),
                     shouldSelect = true,
@@ -806,7 +797,7 @@ class BrowserPresenter @Inject constructor(
 
                 currentTab?.url?.isBookmarkUrl() == true ||
                     currentTab?.url?.isHistoryUrl() == true ->
-                    loadHomePageWithoutBookmarkNativeAdStrip()
+                    loadHomePage()
 
                 currentTab?.tabType in listOf(
                     TabModel.Type.EPHEMERAL,
@@ -841,20 +832,10 @@ class BrowserPresenter @Inject constructor(
         if (!tab.canGoBack()) {
             return
         }
-        suppressBookmarkNativeAdAfterHistoryBack = true
         tab.goBack()
     }
 
-    private fun clearBookmarkNativeAdHistoryBackSuppress() {
-        suppressBookmarkNativeAdAfterHistoryBack = false
-    }
-
-    /**
-     * Loads the home (bookmark) page and keeps the in-page native ad strip hidden, same as after
-     * history-back to bookmarks — avoids showing the ad on every home press.
-     */
-    private fun loadHomePageWithoutBookmarkNativeAdStrip() {
-        suppressBookmarkNativeAdAfterHistoryBack = true
+    private fun loadHomePage() {
         currentTab?.loadFromInitializer(homePageInitializer)
     }
 
@@ -876,14 +857,14 @@ class BrowserPresenter @Inject constructor(
             return
         }
 
-        loadHomePageWithoutBookmarkNativeAdStrip()
+        loadHomePage()
     }
 
     private fun isHomeScreenUrl(url: String): Boolean =
         url.isStartPageUrl() || url.isBookmarkUrl()
 
     private fun computeShowBookmarkNativeAdStrip(url: String): Boolean =
-        url.isBookmarkUrl() && !incognitoMode && !suppressBookmarkNativeAdAfterHistoryBack
+        !url.isBookmarkUrl() && !url.isDownloadsUrl() && !incognitoMode
 
     private fun computeShowDownloadsNativeAdStrip(url: String): Boolean =
         url.isDownloadsUrl() && !incognitoMode
@@ -892,7 +873,7 @@ class BrowserPresenter @Inject constructor(
      * Call when the user clicks on the home button.
      */
     fun onHomeClick() {
-        loadHomePageWithoutBookmarkNativeAdStrip()
+        loadHomePage()
     }
 
     fun closeAllTabs() {
@@ -926,7 +907,6 @@ class BrowserPresenter @Inject constructor(
      * Call when the user clicks on the open new tab button.
      */
     fun onNewTabClick() {
-        clearBookmarkNativeAdHistoryBackSuppress()
         createNewTabAndSelect(homePageInitializer, shouldSelect = true)
     }
 
@@ -1021,7 +1001,6 @@ class BrowserPresenter @Inject constructor(
         if (query.isEmpty()) {
             return
         }
-        clearBookmarkNativeAdHistoryBackSuppress()
         currentTab?.stopLoading()
         val searchUrl = searchEngineProvider.provideSearchEngine().queryUrl + QUERY_PLACE_HOLDER
         val url = smartUrlFilter(query.trim(), true, searchUrl)
@@ -1097,7 +1076,6 @@ class BrowserPresenter @Inject constructor(
     fun onBookmarkClick(index: Int) {
         when (val bookmark = viewState.bookmarks[index]) {
             is Bookmark.Entry -> {
-                clearBookmarkNativeAdHistoryBackSuppress()
                 currentTab?.loadUrl(bookmark.url)
                 view?.closeBookmarkDrawer()
             }
@@ -1434,7 +1412,7 @@ class BrowserPresenter @Inject constructor(
         ) {
             view?.openTabDrawer()
         } else {
-            loadHomePageWithoutBookmarkNativeAdStrip()
+            loadHomePage()
         }
     }
 

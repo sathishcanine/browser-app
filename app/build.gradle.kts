@@ -91,6 +91,11 @@ android {
             )
             buildConfigField(
                 "String",
+                "REWARDED_INTERSTITIAL_DOWNLOAD_AD",
+                "\"ca-app-pub-3940256099942544/5354046379\""
+            )
+            buildConfigField(
+                "String",
                 "INTERSTITIAL_AD_ONE",
                 "\"ca-app-pub-3940256099942544/1033173712\""
             )
@@ -131,6 +136,11 @@ android {
                 "String",
                 "REWARDED_AD_ONE",
                 "\"ca-app-pub-8723888126390754/1021424890\""
+            )
+            buildConfigField(
+                "String",
+                "REWARDED_INTERSTITIAL_DOWNLOAD_AD",
+                "\"ca-app-pub-8723888126390754/8590871261\""
             )
             buildConfigField(
                 "String",

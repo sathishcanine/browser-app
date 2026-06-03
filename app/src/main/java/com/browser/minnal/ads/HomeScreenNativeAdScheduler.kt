@@ -7,11 +7,12 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Delays the bookmarks/home native ad strip until blocking UI (popups, app-open ad flow) is gone,
- * then waits [DELAY_AFTER_OVERLAYS_MS] before allowing a load.
+ * Delays the home native ad strip (non-bookmark pages) until blocking UI (popups, app-open ad
+ * flow) is gone, then waits [DELAY_AFTER_OVERLAYS_MS] before allowing a load. At most one show
+ * per app process session.
  *
  * On later app opens (after the install's first session), also starts that delay when the app
- * returns to the foreground on the home screen even if no popup dismiss event occurs.
+ * returns to the foreground on an eligible page even if no popup dismiss event occurs.
  */
 @Singleton
 class HomeScreenNativeAdScheduler @Inject constructor(
@@ -20,8 +21,9 @@ class HomeScreenNativeAdScheduler @Inject constructor(
     @MainHandler private val handler: Handler,
 ) {
 
-    private var bookmarkHomeVisible = false
+    private var hostPageVisible = false
     private var eligible = false
+    private var shownThisSession = false
     private var listener: ((Boolean) -> Unit)? = null
     private var delayRunnable: Runnable? = null
     private var returningUserFallbackRunnable: Runnable? = null
@@ -31,23 +33,26 @@ class HomeScreenNativeAdScheduler @Inject constructor(
         listener?.invoke(eligible)
     }
 
-    fun setBookmarkHomeVisible(visible: Boolean) {
+    fun setHostPageVisible(visible: Boolean) {
         if (!visible) {
-            if (!bookmarkHomeVisible) {
+            if (!hostPageVisible) {
                 return
             }
-            bookmarkHomeVisible = false
+            hostPageVisible = false
             cancelDelay()
             cancelReturningUserFallback()
             setEligible(false)
             return
         }
-        bookmarkHomeVisible = true
+        if (shownThisSession) {
+            return
+        }
+        hostPageVisible = true
         scheduleDelayAfterOverlays()
     }
 
     fun onBlockingEnvironmentChanged() {
-        if (!bookmarkHomeVisible) {
+        if (!hostPageVisible || shownThisSession) {
             return
         }
         scheduleDelayAfterOverlays()
@@ -55,10 +60,10 @@ class HomeScreenNativeAdScheduler @Inject constructor(
 
     /**
      * App returned to foreground (including cold start). Ensures the home native ad delay runs
-     * on repeat opens when no popups appear and [setBookmarkHomeVisible] does not fire again.
+     * on repeat opens when no popups appear and [setHostPageVisible] does not fire again.
      */
     fun onAppForegrounded() {
-        if (!bookmarkHomeVisible) {
+        if (!hostPageVisible || shownThisSession) {
             return
         }
         scheduleDelayAfterOverlays()
@@ -69,7 +74,7 @@ class HomeScreenNativeAdScheduler @Inject constructor(
 
     fun destroy() {
         setListener(null)
-        bookmarkHomeVisible = false
+        hostPageVisible = false
         cancelDelay()
         cancelReturningUserFallback()
         setEligible(false)
@@ -77,7 +82,7 @@ class HomeScreenNativeAdScheduler @Inject constructor(
 
     private fun scheduleDelayAfterOverlays() {
         cancelDelay()
-        if (!bookmarkHomeVisible) {
+        if (!hostPageVisible || shownThisSession) {
             setEligible(false)
             return
         }
@@ -87,7 +92,7 @@ class HomeScreenNativeAdScheduler @Inject constructor(
         }
         delayRunnable = Runnable {
             delayRunnable = null
-            if (bookmarkHomeVisible && !appOpenAdManager.blocksHomeScreenNativeAd()) {
+            if (hostPageVisible && !shownThisSession && !appOpenAdManager.blocksHomeScreenNativeAd()) {
                 setEligible(true)
             }
         }
@@ -102,7 +107,7 @@ class HomeScreenNativeAdScheduler @Inject constructor(
         cancelReturningUserFallback()
         returningUserFallbackRunnable = Runnable {
             returningUserFallbackRunnable = null
-            if (!bookmarkHomeVisible || eligible) {
+            if (!hostPageVisible || eligible || shownThisSession) {
                 return@Runnable
             }
             if (!appOpenAdManager.blocksHomeScreenNativeAd()) {
@@ -113,6 +118,12 @@ class HomeScreenNativeAdScheduler @Inject constructor(
     }
 
     private fun setEligible(value: Boolean) {
+        if (value) {
+            if (shownThisSession) {
+                return
+            }
+            shownThisSession = true
+        }
         if (eligible == value) {
             return
         }
@@ -131,7 +142,7 @@ class HomeScreenNativeAdScheduler @Inject constructor(
     }
 
     companion object {
-        const val DELAY_AFTER_OVERLAYS_MS = 30_000L
+        const val DELAY_AFTER_OVERLAYS_MS = 1_000L
         private const val RETURNING_USER_NO_POPUP_RECHECK_MS = 750L
     }
 }

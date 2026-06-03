@@ -21,8 +21,8 @@ import com.browser.minnal.rating.RatingPromptDialog
 import com.browser.minnal.utils.DefaultBrowserHelper
 
 /**
- * Native advanced ad strip (expand/collapse, optional close). Used for the bookmarks start page,
- * downloads page, and an extra strip when the user returns to the app on a non-bookmark tab.
+ * Native advanced ad strip (expand/collapse, optional close). Used for the home strip on
+ * non-bookmark pages (once per session), and for the downloads page.
  */
 class BookmarkNativeAdController private constructor(
     private val activity: FragmentActivity,
