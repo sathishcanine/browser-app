@@ -19,21 +19,11 @@
         android:paddingEnd="4dp">
 
         <TextView
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
             android:text="@string/native_ad_sponsored"
             android:textAppearance="?attr/textAppearanceCaption"
             android:textColor="?attr/autoCompleteUrlColor" />
-
-        <ImageButton
-            android:id="@+id/native_ad_expand_toggle"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/native_ad_expand"
-            app:srcCompat="@drawable/ic_action_expand"
-            app:tint="?attr/iconColor" />
     </LinearLayout>
 
     <FrameLayout
@@ -41,6 +31,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="?attr/colorPrimary"
+        android:minHeight="@dimen/native_ad_container_min_height"
         android:visibility="gone" />
 
 </LinearLayout>

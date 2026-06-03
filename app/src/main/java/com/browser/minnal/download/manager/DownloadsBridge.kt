@@ -32,7 +32,7 @@ import com.browser.minnal.utils.isDownloadsUrl
  */
 class DownloadsBridge(
     private val webView: WebView,
-    private val manager: MinnalDownloadManager
+    private val manager: MinnalDownloadManager,
 ) {
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -100,8 +100,6 @@ class DownloadsBridge(
             url = webView.url
             latch.countDown()
         }
-        // The bridge is called by the WebView on a binder thread; awaiting a single hop to the
-        // main thread (microseconds in practice) is acceptable and keeps the URL gate authoritative.
         return runCatching {
             latch.await(50, java.util.concurrent.TimeUnit.MILLISECONDS)
             url.isDownloadsUrl()

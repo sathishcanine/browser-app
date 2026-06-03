@@ -37,6 +37,8 @@
     <dimen name="radial_fab_extra_bottom_inset">16dp</dimen>
     <dimen name="radial_fab_stack_spacing">56dp</dimen>
     <dimen name="bookmark_native_ad_header_height">40dp</dimen>
+    <!-- Reserved before native ad assets load to avoid WebView layout jumps (slow networks). -->
+    <dimen name="native_ad_container_min_height">220dp</dimen>
 
     <dimen name="tab_grid_spacing">5dp</dimen>
     <dimen name="tab_grid_card_corner_radius">16dp</dimen>

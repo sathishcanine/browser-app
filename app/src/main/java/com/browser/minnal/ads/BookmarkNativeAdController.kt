@@ -27,10 +27,11 @@ import com.browser.minnal.utils.DefaultBrowserHelper
 class BookmarkNativeAdController private constructor(
     private val activity: FragmentActivity,
     private val stripRoot: View,
-    private val expandToggle: ImageButton,
+    private val expandToggle: ImageButton?,
     private val closeButton: ImageButton?,
     private val adContainer: FrameLayout,
     private val adUnitId: () -> String,
+    private val reserveLayoutSpace: Boolean,
 ) {
 
     /**
@@ -45,8 +46,15 @@ class BookmarkNativeAdController private constructor(
     private var presenterWantsVisible = false
     private var loadAttemptedForThisVisit = false
 
+    private val reservedAdContainerHeight: Int =
+        if (reserveLayoutSpace) {
+            activity.resources.getDimensionPixelSize(R.dimen.native_ad_container_min_height)
+        } else {
+            0
+        }
+
     init {
-        expandToggle.setOnClickListener {
+        expandToggle?.setOnClickListener {
             expanded = !expanded
             updateExpandedUi()
         }
@@ -69,6 +77,7 @@ class BookmarkNativeAdController private constructor(
             loadAttemptedForThisVisit = false
             stripRoot.isVisible = false
             adContainer.isVisible = false
+            adContainer.alpha = 1f
             expanded = true
             updateExpandedUi()
             destroyLoadedAd()
@@ -83,22 +92,46 @@ class BookmarkNativeAdController private constructor(
     }
 
     private fun updateExpandedUi() {
-        expandToggle.scaleY = if (expanded) -1f else 1f
-        expandToggle.contentDescription = activity.getString(
-            if (expanded) {
-                R.string.native_ad_collapse
-            } else {
-                R.string.native_ad_expand
-            }
-        )
+        if (expandToggle != null) {
+            expandToggle.scaleY = if (expanded) -1f else 1f
+            expandToggle.contentDescription = activity.getString(
+                if (expanded) {
+                    R.string.native_ad_collapse
+                } else {
+                    R.string.native_ad_expand
+                }
+            )
+        } else {
+            expanded = true
+        }
         if (!expanded) {
             adContainer.isVisible = false
-        } else if (loadedNativeAd != null) {
-            adContainer.isVisible = true
+            adContainer.minimumHeight = 0
+        } else {
+            applyReservedAdSpace()
+            if (loadedNativeAd != null) {
+                adContainer.isVisible = true
+                adContainer.alpha = 1f
+            } else if (reserveLayoutSpace) {
+                adContainer.isVisible = true
+                adContainer.alpha = 0f
+            } else {
+                adContainer.isVisible = false
+            }
         }
         if (expanded && presenterWantsVisible && !dismissedForThisVisit && !loadAttemptedForThisVisit) {
             loadNativeAd()
         }
+    }
+
+    private fun applyReservedAdSpace() {
+        if (reservedAdContainerHeight > 0) {
+            adContainer.minimumHeight = reservedAdContainerHeight
+        }
+    }
+
+    private fun clearReservedAdSpace() {
+        adContainer.minimumHeight = 0
     }
 
     private fun loadNativeAd() {
@@ -119,12 +152,27 @@ class BookmarkNativeAdController private constructor(
                 populateNativeAd(adView, ad)
                 adContainer.removeAllViews()
                 adContainer.addView(adView)
+                applyReservedAdSpace()
                 adContainer.isVisible = expanded
+                if (reserveLayoutSpace) {
+                    adContainer.alpha = 0f
+                    adContainer.animate()
+                        .alpha(1f)
+                        .setDuration(AD_FADE_IN_MS)
+                        .start()
+                } else {
+                    adContainer.alpha = 1f
+                }
             }
             .withAdListener(object : AdListener() {
                 override fun onAdFailedToLoad(error: LoadAdError) {
                     loadAttemptedForThisVisit = false
+                    clearReservedAdSpace()
                     adContainer.isVisible = false
+                    adContainer.alpha = 1f
+                    if (reserveLayoutSpace) {
+                        stripRoot.isVisible = false
+                    }
                 }
             })
             .withNativeAdOptions(
@@ -190,6 +238,7 @@ class BookmarkNativeAdController private constructor(
         loadedNativeAd = null
         adContainer.removeAllViews()
         nativeAdViewBinding = null
+        clearReservedAdSpace()
     }
 
     fun destroy() {
@@ -197,6 +246,8 @@ class BookmarkNativeAdController private constructor(
     }
 
     companion object {
+        private const val AD_FADE_IN_MS = 200L
+
         fun forBookmarks(
             activity: FragmentActivity,
             stripBinding: BookmarkNativeAdStripBinding,
@@ -213,6 +264,7 @@ class BookmarkNativeAdController private constructor(
                     BuildConfig.BOOKMARK_NATIVE_AD_UNIT_ID
                 }
             },
+            reserveLayoutSpace = true,
         )
 
         fun forDownloads(
@@ -221,10 +273,11 @@ class BookmarkNativeAdController private constructor(
         ): BookmarkNativeAdController = BookmarkNativeAdController(
             activity = activity,
             stripRoot = stripBinding.root,
-            expandToggle = stripBinding.nativeAdExpandToggle,
+            expandToggle = null,
             closeButton = null,
             adContainer = stripBinding.nativeAdContainer,
             adUnitId = { BuildConfig.DOWNLOADS_NATIVE_AD_UNIT_ID },
+            reserveLayoutSpace = true,
         )
     }
 }

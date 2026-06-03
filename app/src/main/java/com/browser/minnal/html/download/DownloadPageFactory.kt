@@ -120,9 +120,10 @@ html, body { margin: 0; padding: 0; background: var(--surface); color: var(--on-
     font-family: -apple-system, "Roboto", "Segoe UI", system-ui, sans-serif; }
 body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
 
-.app-bar { position: sticky; top: 0; z-index: 10; background: var(--surface);
+.app-bar { background: var(--surface);
     padding: var(--space-5) var(--space-4) var(--space-3);
     border-bottom: 1px solid var(--surface-variant); }
+
 .app-bar h1 { margin: 0 0 var(--space-1); font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
 .app-bar .summary { color: var(--on-surface-variant); font-size: 13px; }
 
@@ -489,16 +490,27 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
         });
     }
 
+    function metaPatchKey(item, status, pct) {
+        // Bucket progress text so we do not replace the meta row on every poll tick.
+        var bytesBucket = Math.floor((item.bytesDownloaded || 0) / 262144);
+        var speedBucket = Math.floor((item.bytesPerSecond || 0) / 51200);
+        return status + "|" + pct + "|" + bytesBucket + "|" + speedBucket;
+    }
+
     function patchCard(card, item) {
         var status = item.status || "PENDING";
         var pct = calcPct(item);
         var body = card.querySelector(".body");
         if (!body) return;
 
-        var metaHtml = renderMeta(item, status, pct);
         var metaEl = body.querySelector(".meta");
-        if (metaEl && metaEl.outerHTML !== metaHtml) {
-            metaEl.outerHTML = metaHtml;
+        var metaKey = metaPatchKey(item, status, pct);
+        if (!metaEl) {
+            body.insertAdjacentHTML("beforeend", renderMeta(item, status, pct));
+        } else if (metaEl.getAttribute("data-patch-key") !== metaKey) {
+            metaEl.setAttribute("data-patch-key", metaKey);
+            metaEl.outerHTML = renderMeta(item, status, pct);
+            metaEl = body.querySelector(".meta");
         }
 
         var isActive = ["PENDING","RUNNING","RETRYING"].indexOf(status) !== -1;
