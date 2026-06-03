@@ -457,8 +457,92 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
     }
 
     // --- Renderers ----------------------------------------------------------
+    var listStructuralKey = "";
+    var lastChipsKey = "";
+    var lastSummaryText = "";
+
+    function calcPct(item) {
+        return (item.totalBytes > 0)
+            ? Math.min(100, Math.max(0, Math.floor((item.bytesDownloaded * 100) / item.totalBytes)))
+            : -1;
+    }
+
+    function listStructuralKeyFor(items) {
+        return items.map(function(i) {
+            return (i.url || "") + "\u0001" + (i.status || "");
+        }).join("\u0002") + "\u0003" + state.filter + "\u0004" + state.query;
+    }
+
+    function findCardByUrl(url) {
+        return Array.prototype.find.call(els.list.querySelectorAll(".card"), function(c) {
+            return c.getAttribute("data-url") === url;
+        });
+    }
+
+    function updateOpenMenus() {
+        Array.prototype.forEach.call(els.list.querySelectorAll(".card"), function(card) {
+            var url = card.getAttribute("data-url");
+            var popup = card.querySelector("[data-popup]");
+            if (!popup) return;
+            if (state.openMenuUrl === url) popup.classList.add("open");
+            else popup.classList.remove("open");
+        });
+    }
+
+    function patchCard(card, item) {
+        var status = item.status || "PENDING";
+        var pct = calcPct(item);
+        var body = card.querySelector(".body");
+        if (!body) return;
+
+        var metaHtml = renderMeta(item, status, pct);
+        var metaEl = body.querySelector(".meta");
+        if (metaEl && metaEl.outerHTML !== metaHtml) {
+            metaEl.outerHTML = metaHtml;
+        }
+
+        var isActive = ["PENDING","RUNNING","RETRYING"].indexOf(status) !== -1;
+        var isPaused = status === "PAUSED";
+        var progressEl = body.querySelector(".progress");
+        if (isActive || isPaused) {
+            if (!progressEl) {
+                var progressWrap = document.createElement("div");
+                progressWrap.innerHTML = '<div class="progress' + (pct < 0 ? ' indeterminate' : '') + '">'
+                    + '<div class="bar" style="width:' + (pct < 0 ? 0 : pct) + '%"></div></div>';
+                var meta = body.querySelector(".meta");
+                if (meta && meta.nextSibling) body.insertBefore(progressWrap.firstChild, meta.nextSibling);
+                else body.appendChild(progressWrap.firstChild);
+                progressEl = body.querySelector(".progress");
+            } else {
+                progressEl.className = "progress" + (pct < 0 ? " indeterminate" : "");
+                var bar = progressEl.querySelector(".bar");
+                if (bar && pct >= 0) bar.style.width = pct + "%";
+            }
+        } else if (progressEl) {
+            progressEl.remove();
+        }
+
+        var actionsHtml = renderActions(item, status);
+        var actionsEl = body.querySelector(".actions");
+        if (actionsHtml) {
+            if (!actionsEl) {
+                body.insertAdjacentHTML("beforeend", actionsHtml);
+            } else if (actionsEl.outerHTML !== actionsHtml) {
+                actionsEl.outerHTML = actionsHtml;
+            }
+        } else if (actionsEl) {
+            actionsEl.remove();
+        }
+
+        if (state.selected.has(item.url)) card.classList.add("selected");
+        else card.classList.remove("selected");
+    }
+
     function renderChips() {
         var c = counts();
+        var key = JSON.stringify(c) + "|" + state.filter;
+        if (key === lastChipsKey) return;
+        lastChipsKey = key;
         els.chips.innerHTML = FILTERS.map(function(f) {
             var n = c[f.id];
             return '<button class="chip' + (f.id === state.filter ? ' active' : '') + '" data-filter="' + f.id + '">'
@@ -485,19 +569,34 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
         parts.push(total === 1 ? LABELS.summary.one : LABELS.summary.other.replace("%d", total));
         if (active > 0) parts.push(LABELS.summary.active.replace("%d", active));
         if (completedBytes > 0) parts.push(formatBytes(completedBytes) + " " + LABELS.summary.completedBytes);
-        els.summary.textContent = parts.join(" · ");
+        var text = parts.join(" · ");
+        if (text === lastSummaryText) return;
+        lastSummaryText = text;
+        els.summary.textContent = text;
     }
 
-    function renderList() {
+    function renderList(forceRebuild) {
         var items = filteredItems();
         if (!items.length) {
+            listStructuralKey = "";
             els.list.innerHTML = "";
             els.list.appendChild(els.emptyTpl.content.cloneNode(true));
             updateBulk();
             return;
         }
-        els.list.innerHTML = items.map(renderCard).join("");
-        bindCardEvents();
+        var key = listStructuralKeyFor(items);
+        if (forceRebuild || key !== listStructuralKey) {
+            listStructuralKey = key;
+            els.list.innerHTML = items.map(renderCard).join("");
+            bindCardEvents();
+            updateOpenMenus();
+        } else {
+            items.forEach(function(item) {
+                var card = findCardByUrl(item.url);
+                if (card) patchCard(card, item);
+            });
+            updateOpenMenus();
+        }
         updateBulk();
     }
 
@@ -505,11 +604,7 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
         var status = item.status || "PENDING";
         var isActive = ["PENDING","RUNNING","RETRYING"].indexOf(status) !== -1;
         var isPaused = status === "PAUSED";
-        var isFailed = status === "FAILED" || status === "CANCELLED";
-        var isDone = status === "COMPLETED";
-        var pct = (item.totalBytes > 0)
-            ? Math.min(100, Math.max(0, Math.floor((item.bytesDownloaded * 100) / item.totalBytes)))
-            : -1;
+        var pct = calcPct(item);
         var bar = "";
         if (isActive || isPaused) {
             bar = '<div class="progress' + (pct < 0 ? ' indeterminate' : '') + '">'
@@ -611,7 +706,7 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
         });
         document.addEventListener("click", function(ev) {
             if (!ev.target.closest(".popup") && !ev.target.closest(".menu-btn")) {
-                if (state.openMenuUrl) { state.openMenuUrl = null; renderList(); }
+                if (state.openMenuUrl) { state.openMenuUrl = null; updateOpenMenus(); }
             }
         }, { once: true });
     }
@@ -621,7 +716,7 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
         switch (action) {
             case "menu":
                 state.openMenuUrl = (state.openMenuUrl === url) ? null : url;
-                renderList();
+                updateOpenMenus();
                 return;
             case "pause": call("pause", url); toast(LABELS.toast.paused); break;
             case "resume": call("resume", url); toast(LABELS.toast.resumed); break;
@@ -668,7 +763,12 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
     function toggleSelection(url) {
         if (state.selected.has(url)) state.selected.delete(url);
         else state.selected.add(url);
-        renderList();
+        var card = findCardByUrl(url);
+        if (card) {
+            if (state.selected.has(url)) card.classList.add("selected");
+            else card.classList.remove("selected");
+        }
+        updateBulk();
     }
 
     function updateBulk() {
@@ -678,7 +778,11 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
         els.bulkLabel.textContent = (n === 1 ? LABELS.bulk.one : LABELS.bulk.other.replace("%d", n));
     }
     els.bulkCancel.addEventListener("click", function() {
-        state.selected.clear(); renderList();
+        state.selected.clear();
+        Array.prototype.forEach.call(els.list.querySelectorAll(".card.selected"), function(card) {
+            card.classList.remove("selected");
+        });
+        updateBulk();
     });
     els.bulkDelete.addEventListener("click", function() {
         var urls = Array.from(state.selected);
@@ -691,7 +795,7 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
     // --- Search -------------------------------------------------------------
     els.search.addEventListener("input", function() {
         state.query = els.search.value;
-        renderList();
+        renderList(true);
     });
 
     // --- Toast --------------------------------------------------------------
