@@ -43,4 +43,9 @@
     <dimen name="tab_grid_card_preview_height">118dp</dimen>
     <dimen name="tab_grid_default_stroke">1dp</dimen>
     <dimen name="tab_grid_selected_stroke">2dp</dimen>
+
+    <dimen name="onboarding_dot_size">8dp</dimen>
+    <dimen name="onboarding_dot_margin">6dp</dimen>
+    <dimen name="onboarding_illustration_padding">28dp</dimen>
+    <dimen name="onboarding_photo_padding">8dp</dimen>
 </resources>

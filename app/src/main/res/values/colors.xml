@@ -50,4 +50,7 @@
     <!-- Launcher adaptive-icon background (matches Minnal icon edge) -->
     <color name="ic_launcher_background">#070F1C</color>
 
+    <color name="onboarding_text_primary">#FFFFFF</color>
+    <color name="onboarding_text_secondary">#B3FFFFFF</color>
+
 </resources>

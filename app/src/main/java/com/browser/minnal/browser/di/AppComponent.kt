@@ -2,6 +2,7 @@ package com.browser.minnal.browser.di
 
 import com.browser.minnal.BrowserApp
 import com.browser.minnal.ThemableBrowserActivity
+import com.browser.minnal.onboarding.OnboardingActivity
 import com.browser.minnal.adblock.BloomFilterAdBlocker
 import com.browser.minnal.adblock.NoOpAdBlocker
 import com.browser.minnal.browser.search.SearchBoxModel
@@ -51,6 +52,8 @@ interface AppComponent {
     fun inject(builder: LightningDialogBuilder)
 
     fun inject(activity: ThemableBrowserActivity)
+
+    fun inject(activity: OnboardingActivity)
 
     fun inject(advancedSettingsFragment: AdvancedSettingsFragment)
 

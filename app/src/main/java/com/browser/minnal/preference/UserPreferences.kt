@@ -353,6 +353,9 @@ class UserPreferences @Inject constructor(
         0L
     )
 
+    /** True after the user finishes or skips the first-run feature onboarding. */
+    var onboardingCompleted by preferences.booleanPreference(ONBOARDING_COMPLETED, false)
+
     /** Epoch millis when the app was first launched (for rating prompt day counting). */
     var firstLaunchEpochMs by preferences.longPreference(FIRST_LAUNCH_EPOCH_MS, 0L)
 
@@ -468,6 +471,7 @@ private const val PREFER_EXTERNAL_APP_FOR_DOWNLOADS = "preferExternalAppForDownl
 private const val DISCOVER_FEED_ENABLED = "discoverFeedEnabled"
 private const val DEFAULT_BROWSER_PROMPT_SNOOZED_UNTIL = "defaultBrowserPromptSnoozedUntilMs"
 private const val LAST_DEFAULT_BROWSER_PROMPT_EPOCH_MS = "lastDefaultBrowserPromptEpochMs"
+private const val ONBOARDING_COMPLETED = "onboardingCompleted"
 private const val FIRST_LAUNCH_EPOCH_MS = "firstLaunchEpochMs"
 private const val APP_OPEN_AD_FIRST_SESSION_COMPLETED = "appOpenAdFirstSessionCompleted"
 private const val RATING_PROMPT_COMPLETED = "ratingPromptCompleted"

@@ -440,6 +440,23 @@
     <!-- Search -->
     <string name="search_insert_suggestion">Insert suggestion</string>
 
+    <!-- First-run onboarding -->
+    <string name="onboarding_welcome_title">Welcome to Minnal</string>
+    <string name="onboarding_welcome_description">A fast, private browser built for everyday browsing — with powerful tools at your fingertips.</string>
+    <string name="onboarding_adblock_title">Block All Popup Ads</string>
+    <string name="onboarding_adblock_description">Built-in ad blocking stops intrusive popups and banners so pages load cleaner and faster.</string>
+    <string name="onboarding_private_title">Full Private Mode</string>
+    <string name="onboarding_private_description">Browse in Incognito with no history saved on your device. Your session stays yours.</string>
+    <string name="onboarding_downloads_title">Fast Downloads</string>
+    <string name="onboarding_downloads_description">Download videos and files quickly with Minnal\'s built-in download manager — no extra apps needed.</string>
+    <string name="onboarding_url_bar_title">Custom URL Bar</string>
+    <string name="onboarding_url_bar_description">Move the address bar to the top or bottom — whichever feels more comfortable for you.</string>
+    <string name="onboarding_fab_title">Quick FAB Menu</string>
+    <string name="onboarding_fab_description">Tap the lightning FAB for instant access to home, bookmarks, downloads, tabs, and more.</string>
+    <string name="onboarding_next">Next</string>
+    <string name="onboarding_skip">Skip</string>
+    <string name="onboarding_get_started">Get Started</string>
+
     <!-- In-app rating prompt (Downloads → Home after a completed download) -->
     <string name="rating_prompt_title">Enjoying Minnal Browser?</string>
     <string name="rating_prompt_message">Your feedback helps us build a faster, safer browser for everyone.</string>
