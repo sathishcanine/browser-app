@@ -20,7 +20,20 @@ import javax.inject.Singleton
 class DownloadStateBus @Inject constructor() {
 
     private val states = ConcurrentHashMap<String, DownloadState>()
+    private val pauseRequestedUrls = ConcurrentHashMap.newKeySet<String>()
     private val subject: PublishSubject<DownloadState> = PublishSubject.create()
+
+    /** Marks that the next worker cancellation for [url] is a user pause, not a full cancel. */
+    fun markPauseRequested(url: String) {
+        pauseRequestedUrls.add(url)
+    }
+
+    fun clearPauseRequested(url: String) {
+        pauseRequestedUrls.remove(url)
+    }
+
+    /** Returns true once per pause request (consumes the flag). */
+    fun consumePauseRequested(url: String): Boolean = pauseRequestedUrls.remove(url)
 
     /** Latest known state for [url], or null if the manager has never tracked it this run. */
     fun snapshot(url: String): DownloadState? = states[url]

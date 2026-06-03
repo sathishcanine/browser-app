@@ -225,54 +225,58 @@ class DownloadWorker(
     }
 
     private fun onCancelled(entry: DownloadEntry, staging: File) {
-        val latest = repository.findDownloadForUrl(entry.url).blockingGet()
-        if (latest != null && DownloadStatus.fromName(latest.status) == DownloadStatus.PAUSED) {
-            val bytes = runCatching { staging.length() }.getOrDefault(0L).coerceAtLeast(0L)
-            runCatching {
-                repository.updateProgress(
-                    url = latest.url,
-                    bytesDownloaded = bytes,
-                    totalBytes = latest.totalBytes,
-                    status = DownloadStatus.PAUSED,
-                ).blockingAwait()
-            }
-            runCatching {
-                bus.update(
-                    DownloadState(
-                        url = latest.url,
-                        title = latest.title,
-                        status = DownloadStatus.PAUSED,
-                        bytesDownloaded = bytes,
-                        totalBytes = latest.totalBytes,
-                        mimeType = latest.mimeType,
-                    ),
-                )
-            }
-            runCatching { notifier.cancel(entry.url) }
+        val latest = repository.findDownloadForUrl(entry.url).blockingGet() ?: return
+        val status = DownloadStatus.fromName(latest.status)
+        val pausedByUser = bus.consumePauseRequested(entry.url) || status == DownloadStatus.PAUSED
+
+        if (pausedByUser) {
+            persistPausedState(latest, staging)
             return
         }
 
+        when (status) {
+            DownloadStatus.PENDING,
+            DownloadStatus.RUNNING,
+            DownloadStatus.RETRYING -> {
+                // Worker was replaced (resume) or progress raced with pause — keep staging & status.
+                return
+            }
+
+            DownloadStatus.CANCELLED -> {
+                runCatching { storage.deleteStaging(entry.url) }
+                runCatching { notifier.cancel(entry.url) }
+            }
+
+            else -> {
+                // Do not mark CANCELLED for FAILED/COMPLETED or unknown — avoid wiping progress.
+                runCatching { notifier.cancel(entry.url) }
+            }
+        }
+    }
+
+    private fun persistPausedState(latest: DownloadEntry, staging: File) {
+        val bytes = runCatching { staging.length() }.getOrDefault(0L).coerceAtLeast(0L)
         runCatching {
-            repository.updateStatus(
-                url = entry.url,
-                status = DownloadStatus.CANCELLED,
-                errorMessage = null,
+            repository.updateProgress(
+                url = latest.url,
+                bytesDownloaded = bytes,
+                totalBytes = latest.totalBytes,
+                status = DownloadStatus.PAUSED,
             ).blockingAwait()
         }
-        runCatching { storage.deleteStaging(entry.url) }
         runCatching {
             bus.update(
                 DownloadState(
-                    url = entry.url,
-                    title = entry.title,
-                    status = DownloadStatus.CANCELLED,
-                    bytesDownloaded = staging.length().coerceAtLeast(0L),
-                    totalBytes = entry.totalBytes,
-                    mimeType = entry.mimeType,
+                    url = latest.url,
+                    title = latest.title,
+                    status = DownloadStatus.PAUSED,
+                    bytesDownloaded = bytes,
+                    totalBytes = latest.totalBytes,
+                    mimeType = latest.mimeType,
                 ),
             )
         }
-        runCatching { notifier.cancel(entry.url) }
+        runCatching { notifier.cancel(latest.url) }
     }
 
     private fun emit(

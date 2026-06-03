@@ -127,6 +127,7 @@ class MinnalDownloadManager @Inject constructor(
      * [DownloadsRepository.deleteDownload] after cancel.
      */
     fun cancel(url: String) {
+        stateBus.clearPauseRequested(url)
         WorkManager.getInstance(application).cancelUniqueWork(workName(url))
         // The worker's CancellationException handler already does the DB / staging cleanup,
         // but if the worker hasn't started yet we still need to apply terminal state.
@@ -149,31 +150,43 @@ class MinnalDownloadManager @Inject constructor(
      * Range-resumes using validators on the row.
      */
     fun pause(url: String) {
-        repository.updateStatus(
-            url = url,
-            status = DownloadStatus.PAUSED,
-            errorMessage = null,
-        ).subscribe(
-            {
-                WorkManager.getInstance(application).cancelUniqueWork(workName(url))
-                stateBus.snapshot(url)?.let {
-                    stateBus.update(it.copy(status = DownloadStatus.PAUSED))
-                }
-            },
-            { logger.log(TAG, "pause: status update failed", it) },
-        )
+        stateBus.markPauseRequested(url)
+        runCatching {
+            repository.updateStatus(
+                url = url,
+                status = DownloadStatus.PAUSED,
+                errorMessage = null,
+            ).blockingAwait()
+            stateBus.snapshot(url)?.let {
+                stateBus.update(it.copy(status = DownloadStatus.PAUSED, errorMessage = null))
+            }
+            WorkManager.getInstance(application).cancelUniqueWork(workName(url))
+        }.onFailure {
+            stateBus.clearPauseRequested(url)
+            logger.log(TAG, "pause failed for $url", it)
+        }
     }
 
     /** Resume (or restart) a previously paused/failed download. */
     fun resume(url: String) {
-        repository.updateStatus(
-            url = url,
-            status = DownloadStatus.PENDING,
-            errorMessage = null
-        ).subscribe(
-            { scheduleWork(url) },
-            { logger.log(TAG, "resume: status update failed", it) }
-        )
+        stateBus.clearPauseRequested(url)
+        runCatching {
+            repository.updateStatus(
+                url = url,
+                status = DownloadStatus.PENDING,
+                errorMessage = null,
+            ).blockingAwait()
+            val snapshot = stateBus.snapshot(url)
+            if (snapshot != null) {
+                stateBus.update(
+                    snapshot.copy(
+                        status = DownloadStatus.PENDING,
+                        errorMessage = null,
+                    ),
+                )
+            }
+            scheduleWork(url)
+        }.onFailure { logger.log(TAG, "resume failed for $url", it) }
     }
 
     /** Alias for [resume] surfaced as "Retry" in the UI for terminal-failed entries. */
@@ -306,7 +319,7 @@ class MinnalDownloadManager @Inject constructor(
             .addTag(DownloadWorker.workTagFor(url))
             .build()
         WorkManager.getInstance(application)
-            .enqueueUniqueWork(workName(url), ExistingWorkPolicy.KEEP, request)
+            .enqueueUniqueWork(workName(url), ExistingWorkPolicy.REPLACE, request)
     }
 
     private fun workName(url: String): String = "minnal-download-" + url.hashCode().toString()
