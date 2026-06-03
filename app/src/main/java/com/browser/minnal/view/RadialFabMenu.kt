@@ -37,6 +37,7 @@ class RadialFabMenu @JvmOverloads constructor(
 ) : FrameLayout(context, attrs, defStyleAttr) {
 
     private val fabMargin = resources.getDimensionPixelSize(R.dimen.radial_fab_margin)
+    private val fabBottomLift = resources.getDimensionPixelSize(R.dimen.radial_fab_bottom_lift)
     private val fabSize = resources.getDimensionPixelSize(R.dimen.radial_fab_size)
     private val itemIconSize = resources.getDimensionPixelSize(R.dimen.radial_fab_item_size)
     private val itemStackSpacing = resources.getDimensionPixelSize(R.dimen.radial_fab_stack_spacing)
@@ -172,7 +173,7 @@ class RadialFabMenu @JvmOverloads constructor(
         (fabSize + fabBottomMargin + fabMargin).toFloat()
 
     fun setFabBottomInset(insetPx: Int) {
-        fabBottomMargin = fabMargin + insetPx
+        fabBottomMargin = fabMargin + insetPx + fabBottomLift
         (mainFab.layoutParams as LayoutParams).bottomMargin = fabBottomMargin
         mainFab.requestLayout()
         updateFabCenter()

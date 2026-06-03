@@ -34,6 +34,7 @@
     <dimen name="radial_fab_item_icon">22dp</dimen>
     <dimen name="radial_fab_item_gap">12dp</dimen>
     <dimen name="radial_fab_margin">16dp</dimen>
+    <dimen name="radial_fab_bottom_lift">12dp</dimen>
     <dimen name="radial_fab_extra_bottom_inset">16dp</dimen>
     <dimen name="radial_fab_stack_spacing">56dp</dimen>
     <dimen name="bookmark_native_ad_header_height">40dp</dimen>

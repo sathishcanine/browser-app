@@ -308,6 +308,9 @@
     <string name="fab_menu_downloads">Downloads</string>
     <string name="fab_menu_move_address_bar_top">Top URL Bar</string>
     <string name="fab_menu_move_address_bar_bottom">Bottom URL Bar</string>
+    <string name="fab_menu_report_issue">Report an Issue</string>
+    <string name="report_issue_email">tamilshowcloud@gmail.com</string>
+    <string name="report_issue_subject">Issue Report</string>
     <string name="dialog_close_other_tabs">Would you like to close all other tabs?</string>
     <string name="menu_move_url_bar_to_top">Move URL bar to top</string>
     <string name="menu_move_url_bar_to_bottom">Move URL bar to bottom</string>

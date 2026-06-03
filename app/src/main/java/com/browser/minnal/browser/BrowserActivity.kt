@@ -550,7 +550,26 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
                 onClick = { presenter.onMenuClick(MenuSelection.DOWNLOADS) },
             ),
             addressBarToggleMenuItem(),
+            RadialFabMenuItem(
+                iconRes = R.drawable.ic_action_report_issue,
+                label = getString(R.string.fab_menu_report_issue),
+                contentDescription = getString(R.string.fab_menu_report_issue),
+                onClick = { reportIssue() },
+            ),
         )
+    }
+
+    private fun reportIssue() {
+        val mailtoUri = Uri.parse(
+            "mailto:${getString(R.string.report_issue_email)}" +
+                "?subject=${Uri.encode(getString(R.string.report_issue_subject))}",
+        )
+        val intent = Intent(Intent.ACTION_SENDTO, mailtoUri)
+        try {
+            startActivity(intent)
+        } catch (_: ActivityNotFoundException) {
+            // No email client installed.
+        }
     }
 
     private fun addressBarToggleMenuItem(): RadialFabMenuItem {
