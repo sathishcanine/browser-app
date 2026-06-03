@@ -465,6 +465,18 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         binding.bookmarkBackButton.setOnClickListener { presenter.onBookmarkMenuClick() }
         binding.searchSslStatus.setOnClickListener { presenter.onSslIconClick() }
 
+        binding.urlActionsBar.urlActionsShare.setOnClickListener {
+            presenter.onMenuClick(MenuSelection.SHARE)
+        }
+        binding.urlActionsBar.urlActionsCopy.setOnClickListener {
+            presenter.onMenuClick(MenuSelection.COPY_LINK)
+        }
+        binding.urlActionsBar.urlActionsEdit.setOnClickListener {
+            binding.search.requestFocus()
+            val length = binding.search.text?.length ?: 0
+            binding.search.setSelection(length)
+        }
+
         tabPager.longPressListener = presenter::onPageLongPress
 
         onBackPressedDispatcher.addCallback {
@@ -581,12 +593,15 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         val toolbarLayout = binding.toolbarLayout
         val toolbar = binding.toolbar
         val progressView = binding.progressView
+        val urlActionsBar = binding.urlActionsBar.root
         val uiLayout = binding.uiLayout
 
         (toolbar.parent as? ViewGroup)?.removeView(toolbar)
         (progressView.parent as? ViewGroup)?.removeView(progressView)
+        (urlActionsBar.parent as? ViewGroup)?.removeView(urlActionsBar)
 
         val bottomChrome = ConstraintLayout(this).apply {
+            id = R.id.bottom_address_bar_container
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -605,6 +620,7 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         }
 
         bottomChrome.addView(divider)
+        bottomChrome.addView(urlActionsBar)
         bottomChrome.addView(toolbar)
         bottomChrome.addView(progressView)
 
@@ -622,7 +638,10 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
             connect(divider.id, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START)
             connect(divider.id, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
             constrainHeight(divider.id, 1)
-            connect(toolbar.id, ConstraintSet.TOP, divider.id, ConstraintSet.BOTTOM)
+            connect(urlActionsBar.id, ConstraintSet.TOP, divider.id, ConstraintSet.BOTTOM)
+            connect(urlActionsBar.id, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START)
+            connect(urlActionsBar.id, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
+            connect(toolbar.id, ConstraintSet.TOP, urlActionsBar.id, ConstraintSet.BOTTOM)
             connect(toolbar.id, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START)
             connect(toolbar.id, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
             constrainHeight(toolbar.id, toolbarHeight)
@@ -635,6 +654,7 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
 
         uiLayout.addView(bottomChrome)
         addressBarContainer = bottomChrome
+        binding.search.setDropDownAnchor(bottomChrome.id)
 
         // Toolbar moved to bottom; hide the empty shell at the top (was causing a gray gap).
         toolbarLayout.fitsSystemWindows = false
@@ -960,6 +980,22 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         }
         viewState.showDownloadsNativeAdStrip?.let { show ->
             downloadsNativeAdController?.onPresenterShowBookmarkNativeAd(show)
+        }
+        viewState.showUrlActionsBar?.let { show ->
+            binding.urlActionsBar.root.isVisible = show
+            if (::radialFabMenu.isInitialized) {
+                updateRadialFabBottomInset()
+            }
+        }
+        viewState.urlActionsTitle?.let { binding.urlActionsBar.urlActionsTitle.text = it }
+        viewState.urlActionsHost?.let { binding.urlActionsBar.urlActionsHost.text = it }
+        if (viewState.showUrlActionsBar != null) {
+            val favicon = viewState.urlActionsFavicon
+            if (favicon != null) {
+                binding.urlActionsBar.urlActionsFavicon.setImageBitmap(favicon)
+            } else {
+                binding.urlActionsBar.urlActionsFavicon.setImageResource(R.drawable.ic_webpage)
+            }
         }
     }
 

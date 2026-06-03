@@ -31,6 +31,7 @@ key.properties
 # Gradle
 build
 .gradle
+.gradle-home
 .kotlin
 
 # https://gist.github.com/AltNico/c581f370b3f88715876b

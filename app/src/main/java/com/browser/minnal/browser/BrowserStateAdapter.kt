@@ -7,6 +7,7 @@ import com.browser.minnal.database.downloads.DownloadEntry
 import com.browser.minnal.ssl.SslCertificateInfo
 import com.browser.minnal.ssl.showSslDialog
 import android.content.Intent
+import android.graphics.Bitmap
 import android.view.View
 import com.browser.minnal.browser.view.targetUrl.LongPress
 
@@ -35,8 +36,17 @@ class BrowserStateAdapter(private val browserActivity: BrowserActivity) : Browse
             isRootFolder,
             findInPage,
             showBookmarkNativeAdStrip,
-            showDownloadsNativeAdStrip
+            showDownloadsNativeAdStrip,
+            showUrlActionsBar,
+            urlActionsTitle,
+            urlActionsHost,
+            urlActionsFavicon
         ) = viewState
+
+        val urlActionsBarChanged = showUrlActionsBar != currentState?.showUrlActionsBar ||
+            urlActionsTitle != currentState?.urlActionsTitle ||
+            urlActionsHost != currentState?.urlActionsHost ||
+            urlActionsFavicon != currentState?.urlActionsFavicon
 
         browserActivity.renderState(
             PartialBrowserViewState(
@@ -58,7 +68,11 @@ class BrowserStateAdapter(private val browserActivity: BrowserActivity) : Browse
                 },
                 showDownloadsNativeAdStrip = showDownloadsNativeAdStrip.takeIf {
                     it != currentState?.showDownloadsNativeAdStrip
-                }
+                },
+                showUrlActionsBar = showUrlActionsBar.takeIf { urlActionsBarChanged },
+                urlActionsTitle = urlActionsTitle.takeIf { urlActionsBarChanged },
+                urlActionsHost = urlActionsHost.takeIf { urlActionsBarChanged },
+                urlActionsFavicon = urlActionsFavicon.takeIf { urlActionsBarChanged }
             )
         )
 

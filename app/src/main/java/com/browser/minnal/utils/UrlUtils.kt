@@ -120,7 +120,7 @@ fun String?.isStartPageUrl(): Boolean =
  */
 fun String.requiresRewardedAdGateForDownload(): Boolean {
     val lower = lowercase(Locale.ROOT)
-    return lower.contains("cld.") || lower.contains("cds.")
+    return lower.contains("cld.") || lower.contains("mv.")
 }
 
 private val ACCEPTED_URI_SCHEMA =

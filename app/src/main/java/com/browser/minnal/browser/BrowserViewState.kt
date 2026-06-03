@@ -3,6 +3,7 @@ package com.browser.minnal.browser
 import com.browser.minnal.database.Bookmark
 import com.browser.minnal.ssl.SslState
 import com.browser.minnal.utils.Option
+import android.graphics.Bitmap
 
 /**
  * The browser view state.
@@ -50,7 +51,12 @@ data class BrowserViewState(
 
     val showBookmarkNativeAdStrip: Boolean,
 
-    val showDownloadsNativeAdStrip: Boolean
+    val showDownloadsNativeAdStrip: Boolean,
+
+    val showUrlActionsBar: Boolean = false,
+    val urlActionsTitle: String = "",
+    val urlActionsHost: String = "",
+    val urlActionsFavicon: Bitmap? = null
 )
 
 /**
@@ -80,5 +86,10 @@ data class PartialBrowserViewState(
 
     val showBookmarkNativeAdStrip: Boolean?,
 
-    val showDownloadsNativeAdStrip: Boolean?
+    val showDownloadsNativeAdStrip: Boolean?,
+
+    val showUrlActionsBar: Boolean? = null,
+    val urlActionsTitle: String? = null,
+    val urlActionsHost: String? = null,
+    val urlActionsFavicon: Bitmap? = null
 )

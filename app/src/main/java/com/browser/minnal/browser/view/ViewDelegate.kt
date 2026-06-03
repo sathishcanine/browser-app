@@ -2,6 +2,7 @@ package com.browser.minnal.browser.view
 
 import com.browser.minnal.databinding.BookmarkNativeAdStripBinding
 import com.browser.minnal.databinding.DownloadsNativeAdStripBinding
+import com.browser.minnal.databinding.UrlActionsBarBinding
 import com.browser.minnal.icon.TabCountView
 import com.browser.minnal.search.SearchView
 import android.widget.FrameLayout
@@ -89,5 +90,7 @@ interface ViewDelegate {
     val searchSslStatus: ImageView
 
     val progressView: ProgressBar
+
+    val urlActionsBar: UrlActionsBarBinding
 
 }

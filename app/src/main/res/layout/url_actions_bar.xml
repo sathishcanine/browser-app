@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="@dimen/material_grid_margin"
+    android:paddingTop="4dp"
+    android:paddingEnd="@dimen/material_grid_margin"
+    android:paddingBottom="8dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/searchBackground"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingTop="10dp"
+        android:paddingEnd="4dp"
+        android:paddingBottom="10dp">
+
+        <ImageView
+            android:id="@+id/url_actions_favicon"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:contentDescription="@null"
+            android:scaleType="centerCrop"
+            app:srcCompat="@drawable/ic_webpage" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/url_actions_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="?attr/autoCompleteTitleColor"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/url_actions_host"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="?attr/autoCompleteUrlColor"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/url_actions_share"
+            android:layout_width="@dimen/material_grid_touch_small"
+            android:layout_height="@dimen/material_grid_touch_small"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/action_share"
+            android:padding="6dp"
+            android:scaleType="centerInside"
+            app:srcCompat="@drawable/ic_action_share"
+            app:tint="?attr/iconColor" />
+
+        <ImageView
+            android:id="@+id/url_actions_copy"
+            android:layout_width="@dimen/material_grid_touch_small"
+            android:layout_height="@dimen/material_grid_touch_small"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/action_copy"
+            android:padding="6dp"
+            android:scaleType="centerInside"
+            app:srcCompat="@drawable/ic_action_copy"
+            app:tint="?attr/iconColor" />
+
+        <ImageView
+            android:id="@+id/url_actions_edit"
+            android:layout_width="@dimen/material_grid_touch_small"
+            android:layout_height="@dimen/material_grid_touch_small"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/url_actions_edit"
+            android:padding="6dp"
+            android:scaleType="centerInside"
+            app:srcCompat="@drawable/ic_action_edit"
+            app:tint="?attr/iconColor" />
+    </LinearLayout>
+</LinearLayout>

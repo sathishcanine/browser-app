@@ -58,6 +58,16 @@
                         layout="@layout/browser_toolbar_row" />
                 </androidx.appcompat.widget.Toolbar>
 
+                <include
+                    android:id="@+id/url_actions_bar"
+                    layout="@layout/url_actions_bar"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:visibility="gone"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@id/toolbar" />
+
                 <ProgressBar
                     android:id="@+id/progress_view"
                     style="?android:attr/progressBarStyleHorizontal"
@@ -78,7 +88,8 @@
                     android:background="?attr/dividerColor"
                     app:layout_constraintBottom_toBottomOf="parent"
                     app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent" />
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@id/url_actions_bar" />
             </androidx.constraintlayout.widget.ConstraintLayout>
 
             <FrameLayout

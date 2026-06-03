@@ -51,6 +51,8 @@ import com.browser.minnal.utils.isDownloadsUrl
 import com.browser.minnal.utils.isStartPageUrl
 import com.browser.minnal.utils.isHistoryUrl
 import com.browser.minnal.utils.isSpecialUrl
+import android.graphics.Bitmap
+import android.net.Uri
 import com.browser.minnal.utils.smartUrlFilter
 import com.browser.minnal.utils.value
 import androidx.activity.result.ActivityResult
@@ -353,7 +355,23 @@ class BrowserPresenter @Inject constructor(
                 isBookmarkEnabled = !isSpecialUrl,
                 findInPage = tab.findQuery.orEmpty(),
                 showBookmarkNativeAdStrip = computeShowBookmarkNativeAdStrip(url),
-                showDownloadsNativeAdStrip = computeShowDownloadsNativeAdStrip(url)
+                showDownloadsNativeAdStrip = computeShowDownloadsNativeAdStrip(url),
+                showUrlActionsBar = isSearchViewFocused && !url.isSpecialUrl(),
+                urlActionsTitle = if (isSearchViewFocused && !url.isSpecialUrl()) {
+                    title.ifBlank { url }
+                } else {
+                    viewState.urlActionsTitle
+                },
+                urlActionsHost = if (isSearchViewFocused && !url.isSpecialUrl()) {
+                    url.toDisplayHost()
+                } else {
+                    viewState.urlActionsHost
+                },
+                urlActionsFavicon = if (isSearchViewFocused && !url.isSpecialUrl()) {
+                    tab.favicon
+                } else {
+                    viewState.urlActionsFavicon
+                }
             )
         }.observeOn(mainScheduler)
             .subscribe { view.updateState(it) }
@@ -970,12 +988,18 @@ class BrowserPresenter @Inject constructor(
      */
     fun onSearchFocusChanged(isFocused: Boolean) {
         isSearchViewFocused = isFocused
+        val tab = currentTab
+        val url = tab?.url?.takeIf { !it.isSpecialUrl() }
         if (isFocused) {
             view?.updateState(
                 viewState.copy(
                     sslState = SslState.None,
                     isRefresh = false,
-                    displayUrl = currentTab?.url?.takeIf { !it.isSpecialUrl() }.orEmpty()
+                    displayUrl = url.orEmpty(),
+                    showUrlActionsBar = url != null,
+                    urlActionsTitle = tab?.title.orEmpty().ifBlank { url.orEmpty() },
+                    urlActionsHost = url?.toDisplayHost().orEmpty(),
+                    urlActionsFavicon = tab?.favicon
                 )
             )
         } else {
@@ -987,7 +1011,8 @@ class BrowserPresenter @Inject constructor(
                         url = currentTab?.url.orEmpty(),
                         title = currentTab?.title.orEmpty(),
                         isLoading = (currentTab?.loadingProgress ?: 0) < 100
-                    )
+                    ),
+                    showUrlActionsBar = false
                 )
             )
         }
@@ -1602,6 +1627,12 @@ class BrowserPresenter @Inject constructor(
     private fun BrowserContract.View?.updateState(state: BrowserViewState) {
         viewState = state
         this?.renderState(viewState)
+    }
+
+    private fun String.toDisplayHost(): String = try {
+        Uri.parse(this).host?.removePrefix("www.").orEmpty()
+    } catch (_: Exception) {
+        ""
     }
 
     private fun BrowserContract.View?.updateTabs(tabs: List<TabViewState>) {
