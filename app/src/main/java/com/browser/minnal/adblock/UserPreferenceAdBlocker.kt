@@ -12,6 +12,10 @@ class UserPreferenceAdBlocker @Inject constructor(
     private val bloomFilterAdBlocker: BloomFilterAdBlocker,
 ) : AdBlocker {
 
-    override fun isAd(url: String): Boolean =
-        userPreferences.adBlockEnabled && bloomFilterAdBlocker.isAd(url)
+    override fun isAd(url: String): Boolean {
+        if (GooglePublisherAdDomains.isExempt(url)) {
+            return false
+        }
+        return userPreferences.adBlockEnabled && bloomFilterAdBlocker.isAd(url)
+    }
 }
