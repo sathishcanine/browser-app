@@ -554,6 +554,8 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
                 iconRes = R.drawable.ic_action_report_issue,
                 label = getString(R.string.fab_menu_report_issue),
                 contentDescription = getString(R.string.fab_menu_report_issue),
+                iconBackgroundColorRes = R.color.fab_report_issue_background,
+                labelTextColorRes = R.color.fab_report_issue_label,
                 onClick = { reportIssue() },
             ),
         )

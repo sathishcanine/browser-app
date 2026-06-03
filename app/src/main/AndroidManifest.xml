@@ -79,14 +79,8 @@
 
         <activity
             android:name="com.browser.minnal.onboarding.OnboardingActivity"
-            android:exported="true"
-            android:theme="@style/Theme.Onboarding">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
+            android:exported="false"
+            android:theme="@style/Theme.Onboarding" />
         <activity
             android:name="com.browser.minnal.DefaultBrowserActivity"
             android:alwaysRetainTaskState="true"
@@ -97,6 +91,11 @@
             android:launchMode="singleInstance"
             android:theme="@style/Theme.LightTheme"
             android:windowSoftInputMode="stateHidden|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
             <intent-filter tools:ignore="AppLinkUrlError">
                 <action android:name="android.intent.action.MAIN" />
 

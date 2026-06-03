@@ -16,6 +16,7 @@ import android.view.animation.DecelerateInterpolator
 import android.view.animation.OvershootInterpolator
 import android.widget.FrameLayout
 import android.widget.ImageView
+import androidx.annotation.ColorRes
 import androidx.annotation.DrawableRes
 import androidx.core.view.ViewCompat
 import androidx.core.view.isVisible
@@ -25,6 +26,8 @@ data class RadialFabMenuItem(
     val label: String,
     val contentDescription: String,
     val onClick: () -> Unit,
+    @ColorRes val iconBackgroundColorRes: Int = R.color.accent_color,
+    @ColorRes val labelTextColorRes: Int = R.color.white,
 )
 
 /**
@@ -196,8 +199,9 @@ class RadialFabMenu @JvmOverloads constructor(
             binding.radialFabItemIcon.setImageResource(item.iconRes)
             binding.radialFabItemIcon.imageTintList = context.getColorStateList(R.color.white)
             binding.radialFabItemIconContainer.backgroundTintList =
-                context.getColorStateList(R.color.accent_color)
+                context.getColorStateList(item.iconBackgroundColorRes)
             binding.radialFabItemLabel.text = item.label
+            binding.radialFabItemLabel.setTextColor(context.getColor(item.labelTextColorRes))
             binding.root.contentDescription = item.contentDescription
             binding.root.elevation = resources.getDimension(R.dimen.material_grid_unit) * 2
             binding.root.alpha = 0f

@@ -10,6 +10,8 @@
     <color name="primary_color">#E0E0E0</color>
     <color name="secondary_color">#66000000</color>
     <color name="accent_color">#0073EF</color>
+    <color name="fab_report_issue_background">#E65100</color>
+    <color name="fab_report_issue_label">#FFAB40</color>
     <color name="rating_star_active">#FFB300</color>
     <color name="rating_star_inactive">#BDBDBD</color>
 

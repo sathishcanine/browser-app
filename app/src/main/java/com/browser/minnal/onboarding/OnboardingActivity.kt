@@ -23,6 +23,11 @@ import javax.inject.Inject
  */
 class OnboardingActivity : AppCompatActivity() {
 
+    companion object {
+        fun shouldShow(userPreferences: UserPreferences): Boolean =
+            !userPreferences.onboardingCompleted && userPreferences.firstLaunchEpochMs == 0L
+    }
+
     @Inject
     internal lateinit var userPreferences: UserPreferences
 
@@ -39,7 +44,7 @@ class OnboardingActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         injector.inject(this)
-        if (shouldSkipOnboarding()) {
+        if (!shouldShow(userPreferences)) {
             launchBrowserAndFinish()
             return
         }
@@ -97,9 +102,6 @@ class OnboardingActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
-    private fun shouldSkipOnboarding(): Boolean =
-        userPreferences.onboardingCompleted || userPreferences.firstLaunchEpochMs != 0L
-
     private fun buildDots(count: Int) {
         dotsContainer.removeAllViews()
         val size = resources.getDimensionPixelSize(R.dimen.onboarding_dot_size)
@@ -137,7 +139,11 @@ class OnboardingActivity : AppCompatActivity() {
     }
 
     private fun launchBrowserAndFinish() {
-        startActivity(Intent(this, DefaultBrowserActivity::class.java))
+        startActivity(
+            Intent(this, DefaultBrowserActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            },
+        )
         finish()
         overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
     }
