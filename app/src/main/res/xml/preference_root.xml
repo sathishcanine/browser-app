@@ -25,17 +25,6 @@
         app:summary="@string/settings_about_explain"
         app:title="@string/settings_about" />
     <Preference
-        app:summary="@string/faq_description"
-        app:title="@string/faq">
-        <intent
-            android:action="android.intent.action.VIEW"
-            android:data="http://acrdevelopment.org/lightning/faq">
-            <extra
-                android:name="SOURCE"
-                android:value="SELF" />
-        </intent>
-    </Preference>
-    <Preference
         app:fragment="com.browser.minnal.settings.fragment.DebugSettingsFragment"
         app:key="DEBUG"
         app:title="@string/debug_title" />

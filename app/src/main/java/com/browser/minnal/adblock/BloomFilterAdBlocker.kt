@@ -1,6 +1,5 @@
 package com.browser.minnal.adblock
 
-import com.browser.minnal.R
 import com.browser.minnal.adblock.source.HostsDataSourceProvider
 import com.browser.minnal.adblock.source.HostsResult
 import com.browser.minnal.adblock.util.BloomFilter
@@ -15,7 +14,6 @@ import com.browser.minnal.concurrency.CoroutineDispatchers
 import com.browser.minnal.database.adblock.Host
 import com.browser.minnal.database.adblock.HostsPreferenceStore
 import com.browser.minnal.database.adblock.HostsRepository
-import com.browser.minnal.extensions.toast
 import com.browser.minnal.log.Logger
 import android.app.Application
 import androidx.core.net.toUri
@@ -28,7 +26,6 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.launch
 import java.net.URISyntaxException
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -104,9 +101,6 @@ class BloomFilterAdBlocker @Inject constructor(
                     logger.log(TAG, "Finished loading bloom filter")
                 } else {
                     logger.log(TAG, "Failed to load bloom filter")
-                    appCoroutineScope.launch(coroutineDispatchers.main) {
-                        application.toast(R.string.ad_block_load_failure)
-                    }
                 }
             }
             .launchIn(appCoroutineScope)

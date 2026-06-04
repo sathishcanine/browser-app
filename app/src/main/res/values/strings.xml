@@ -369,9 +369,6 @@
     <string name="tab_style_side_drawer">Side Drawer</string>
     <string name="tab_style_bottom_drawer">Bottom Drawer</string>
 
-    <string name="faq">FAQ</string>
-    <string name="faq_description">Frequently asked questions</string>
-
     <!-- debug strings -->
     <string name="debug_title">Debug Settings</string>
     <string name="debug_leak_canary">LeakCanary</string>
@@ -426,8 +423,6 @@
     <string name="native_ad_close">Dismiss ad</string>
 
     <!--Ad block -->
-    <string name="ad_block_load_failure">Failed to load hosts from ad blocking source.</string>
-
     <string name="infinity">∞</string>
 
     <!-- SSL -->
