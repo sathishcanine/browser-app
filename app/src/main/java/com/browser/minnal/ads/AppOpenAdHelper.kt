@@ -102,6 +102,7 @@ class AppOpenAdHelper @Inject constructor(
         isShowing = true
         ad.fullScreenContentCallback = object : FullScreenContentCallback() {
             override fun onAdDismissedFullScreenContent() {
+                FullScreenAdHostWindow.restore(activity)
                 clearLoadedAd()
                 isShowing = false
                 onAdIdleListener?.invoke()
@@ -109,6 +110,7 @@ class AppOpenAdHelper @Inject constructor(
             }
 
             override fun onAdFailedToShowFullScreenContent(error: AdError) {
+                FullScreenAdHostWindow.restore(activity)
                 clearLoadedAd()
                 isShowing = false
                 logger.log(TAG, "App open ad failed to show: ${error.message}")
@@ -121,9 +123,12 @@ class AppOpenAdHelper @Inject constructor(
             }
         }
         return runCatching {
+            FullScreenAdHostWindow.prepare(activity)
+            ad.setImmersiveMode(true)
             ad.show(activity)
             true
         }.getOrElse {
+            FullScreenAdHostWindow.restore(activity)
             isShowing = false
             clearLoadedAd()
             logger.log(TAG, "App open ad show threw", it)

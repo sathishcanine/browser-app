@@ -174,6 +174,7 @@ class RewardedDownloadAdHelper @Inject constructor(
         interstitialAdHelper.beginSuppress()
         ad.fullScreenContentCallback = object : FullScreenContentCallback() {
             override fun onAdDismissedFullScreenContent() {
+                restoreHostWindow(activity)
                 interstitialAdHelper.endSuppress()
                 preload(activity)
                 if (rewardGranted) {
@@ -184,6 +185,7 @@ class RewardedDownloadAdHelper @Inject constructor(
             }
 
             override fun onAdFailedToShowFullScreenContent(error: AdError) {
+                restoreHostWindow(activity)
                 interstitialAdHelper.endSuppress()
                 logger.log(TAG, "Rewarded download ad failed to show: ${error.message}")
                 preload(activity)
@@ -193,10 +195,13 @@ class RewardedDownloadAdHelper @Inject constructor(
             override fun onAdShowedFullScreenContent() = Unit
         }
         runCatching {
+            prepareHostWindow(activity)
+            ad.setImmersiveMode(true)
             ad.show(activity) {
                 rewardGranted = true
             }
         }.onFailure {
+            restoreHostWindow(activity)
             interstitialAdHelper.endSuppress()
             logger.log(TAG, "Rewarded download ad show threw", it)
             onRewardedFailed()
@@ -214,6 +219,7 @@ class RewardedDownloadAdHelper @Inject constructor(
         interstitialAdHelper.beginSuppress()
         ad.fullScreenContentCallback = object : FullScreenContentCallback() {
             override fun onAdDismissedFullScreenContent() {
+                restoreHostWindow(activity)
                 interstitialAdHelper.endSuppress()
                 if (rewardGranted) {
                     onRewarded()
@@ -223,6 +229,7 @@ class RewardedDownloadAdHelper @Inject constructor(
             }
 
             override fun onAdFailedToShowFullScreenContent(error: AdError) {
+                restoreHostWindow(activity)
                 interstitialAdHelper.endSuppress()
                 logger.log(TAG, "Rewarded interstitial download ad failed to show: ${error.message}")
                 onProceedWithoutAd()
@@ -231,14 +238,25 @@ class RewardedDownloadAdHelper @Inject constructor(
             override fun onAdShowedFullScreenContent() = Unit
         }
         runCatching {
+            prepareHostWindow(activity)
+            ad.setImmersiveMode(true)
             ad.show(activity) {
                 rewardGranted = true
             }
         }.onFailure {
+            restoreHostWindow(activity)
             interstitialAdHelper.endSuppress()
             logger.log(TAG, "Rewarded interstitial download ad show threw", it)
             onProceedWithoutAd()
         }
+    }
+
+    private fun prepareHostWindow(activity: FragmentActivity) {
+        FullScreenAdHostWindow.prepare(activity)
+    }
+
+    private fun restoreHostWindow(activity: FragmentActivity) {
+        FullScreenAdHostWindow.restore(activity)
     }
 
     private interface LoadListener {
