@@ -203,9 +203,6 @@
     <string name="message_added_to_homescreen">Acceso directo añadido a la pantalla de inicio</string>
     <string name="action_delete_all_bookmarks">Borrar todos los marcadores</string>
 
-    <string name="faq">FAQ</string>
-    <string name="faq_description">Preguntas frecuentes</string>
-
     <!-- debug strings -->
     <string name="debug_title">Ajustes de depuración</string>
     <string name="debug_leak_canary">LeakCanary</string>

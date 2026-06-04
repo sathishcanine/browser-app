@@ -266,9 +266,6 @@
     <string name="upsell_plus_version">Reklamları engellemek için Lightning Plus\'a geçin</string>
     <string name="message_open_download_fail">Bu dosya artık mevcut değil</string>
 
-    <string name="faq">S.S.S</string>
-    <string name="faq_description">Sık Sorulan Sorular</string>
-
     <!-- debug strings -->					  
     <string name="debug_title">Hata ayıklama ayarları</string>
     <string name="debug_leak_canary">LeakCanary</string>
@@ -318,7 +315,5 @@
     <string name="notification_incognito_running_description">Devam eden gizli bildirim</string>
 
     <!--Ad block -->
-    <string name="ad_block_load_failure">Ana bilgisayarlar reklam engelleme kaynağından yüklenemedi.</string>
-
     <string name="infinity">∞</string>
 </resources>

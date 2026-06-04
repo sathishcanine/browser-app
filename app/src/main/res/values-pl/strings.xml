@@ -29,8 +29,6 @@
 	<string name="app_restart">Uruchom aplikację ponownie, aby uzyskać zmiany.</string>
 	<string name="debug_leak_canary">LeakCanary</string>
 	<string name="debug_title">Ustawienia debugowania</string>
-	<string name="faq_description">Najczęściej zadawane pytania</string>
-	<string name="faq">FAQ</string>
 	<string name="message_open_download_fail">Ten plik już nie istnieje</string>
 	<string name="upsell_plus_version">Przejdź na Lightning Plus, aby blokować reklamy</string>
     <string name="action_delete_all_bookmarks">Usuń wszystkie zakładki</string>

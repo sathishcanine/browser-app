@@ -208,9 +208,6 @@
     <string name="message_added_to_homescreen">Ярлык добавлен на домашний экран</string>
     <string name="action_delete_all_bookmarks">Удалить все закладки</string>
 
-    <string name="faq">FAQ</string>
-    <string name="faq_description">Часто задаваемые вопросы</string>
-
     <!-- debug strings -->
     <string name="debug_title">Настройки отладки</string>
     <string name="debug_leak_canary">LeakCanary</string>

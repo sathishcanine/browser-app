@@ -229,9 +229,6 @@
     <string name="message_added_to_homescreen">Atalho adicionado ao ecrã</string>
     <string name="action_delete_all_bookmarks">Apagar todos os marcadores</string>
 
-    <string name="faq">FAQ</string>
-    <string name="faq_description">Perguntas frequentes</string>
-
     <!-- debug strings -->
     <string name="debug_title">Definições de depuração</string>
     <string name="debug_leak_canary">LeakCanary</string>

@@ -516,11 +516,11 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
         });
     }
 
-    function metaPatchKey(item, status, pct) {
-        // Bucket progress text so we do not replace the meta row on every poll tick.
-        var bytesBucket = Math.floor((item.bytesDownloaded || 0) / 262144);
-        var speedBucket = Math.floor((item.bytesPerSecond || 0) / 51200);
-        return status + "|" + pct + "|" + bytesBucket + "|" + speedBucket;
+    function metaPatchKey(item, status) {
+        // Coarse buckets only — the progress bar width is patched separately every tick.
+        // Do not include raw % or speed here or the meta row flashes on each 750 ms poll.
+        var bytesBucket = Math.floor((item.bytesDownloaded || 0) / 524288);
+        return status + "|" + bytesBucket;
     }
 
     function patchCard(card, item) {
@@ -530,13 +530,16 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
         if (!body) return;
 
         var metaEl = body.querySelector(".meta");
-        var metaKey = metaPatchKey(item, status, pct);
+        var metaKey = metaPatchKey(item, status);
         if (!metaEl) {
             body.insertAdjacentHTML("beforeend", renderMeta(item, status, pct));
+            metaEl = body.querySelector(".meta");
+            if (metaEl) metaEl.setAttribute("data-patch-key", metaKey);
         } else if (metaEl.getAttribute("data-patch-key") !== metaKey) {
             metaEl.setAttribute("data-patch-key", metaKey);
             metaEl.outerHTML = renderMeta(item, status, pct);
             metaEl = body.querySelector(".meta");
+            if (metaEl) metaEl.setAttribute("data-patch-key", metaKey);
         }
 
         var isActive = ["PENDING","RUNNING","RETRYING"].indexOf(status) !== -1;
@@ -565,7 +568,10 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
         if (actionsHtml) {
             if (!actionsEl) {
                 body.insertAdjacentHTML("beforeend", actionsHtml);
-            } else if (actionsEl.outerHTML !== actionsHtml) {
+                actionsEl = body.querySelector(".actions");
+                if (actionsEl) actionsEl.setAttribute("data-actions-status", status);
+            } else if (actionsEl.getAttribute("data-actions-status") !== status) {
+                actionsEl.setAttribute("data-actions-status", status);
                 actionsEl.outerHTML = actionsHtml;
             }
         } else if (actionsEl) {

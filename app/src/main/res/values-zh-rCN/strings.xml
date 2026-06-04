@@ -256,9 +256,6 @@
     <string name="upsell_plus_version">升级到 Lightning Plus 以屏蔽广告</string>
     <string name="message_open_download_fail">文件不存在</string>
 
-    <string name="faq">FAQ</string>
-    <string name="faq_description">常见问题</string>
-
     <!-- debug strings -->
     <string name="debug_title">调试设置</string>
     <string name="app_restart">重新启动应用以使更改生效</string>
@@ -306,8 +303,6 @@
     <string name="notification_incognito_running_description">进行中的无痕标签页通知</string>
 
     <!--Ad block -->
-    <string name="ad_block_load_failure">从广告屏蔽来源加载 Hosts 失败</string>
-
     <!-- SSL -->
     <string name="ssl_info_issued_by">颁发者</string>
     <string name="ssl_info_issued_to">颁发给</string>
