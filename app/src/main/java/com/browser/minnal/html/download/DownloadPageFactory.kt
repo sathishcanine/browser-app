@@ -316,6 +316,8 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
         selected: new Set()
     };
 
+    var statusByUrl = {};
+
     var els = {
         summary: document.getElementById("summary"),
         list: document.getElementById("list"),
@@ -330,6 +332,29 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
     };
 
     // --- Data refresh -------------------------------------------------------
+    function detectNewCompletions(items) {
+        var sawNew = false;
+        items.forEach(function(i) {
+            var url = i.url || "";
+            var status = i.status || "PENDING";
+            var prev = statusByUrl[url];
+            if (status === "COMPLETED" && prev && prev !== "COMPLETED") {
+                sawNew = true;
+            }
+            statusByUrl[url] = status;
+        });
+        if (sawNew) {
+            if (LABELS.toast && LABELS.toast.complete) {
+                toast(LABELS.toast.complete);
+            }
+            try {
+                if (BRIDGE && typeof BRIDGE.requestRatingPromptIfEligible === "function") {
+                    BRIDGE.requestRatingPromptIfEligible();
+                }
+            } catch (e) { /* bridge optional on cached pages */ }
+        }
+    }
+
     function refresh() {
         if (!BRIDGE) return;
         try {
@@ -339,6 +364,7 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
         } catch (e) {
             state.items = [];
         }
+        detectNewCompletions(state.items);
         render();
     }
 
@@ -878,6 +904,7 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
                 "completedBytes": ${s(R.string.downloads_summary_completed_bytes)}
             },
             "toast": {
+                "complete": ${s(R.string.download_complete)},
                 "paused": ${s(R.string.downloads_toast_paused)},
                 "resumed": ${s(R.string.downloads_toast_resumed)},
                 "cancelled": ${s(R.string.downloads_toast_cancelled)},

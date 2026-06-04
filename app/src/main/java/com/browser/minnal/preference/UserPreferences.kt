@@ -356,7 +356,7 @@ class UserPreferences @Inject constructor(
     /** True after the user finishes or skips the first-run feature onboarding. */
     var onboardingCompleted by preferences.booleanPreference(ONBOARDING_COMPLETED, false)
 
-    /** Epoch millis when the app was first launched (for rating prompt day counting). */
+    /** Epoch millis when the app was first launched (onboarding / app-open ad eligibility). */
     var firstLaunchEpochMs by preferences.longPreference(FIRST_LAUNCH_EPOCH_MS, 0L)
 
     /**

@@ -44,7 +44,7 @@ object RatingPromptDialog {
             dialog.dismiss()
         }
 
-        laterButton.setOnClickListener {
+        laterButton?.setOnClickListener {
             onLater()
             dialog.dismiss()
         }

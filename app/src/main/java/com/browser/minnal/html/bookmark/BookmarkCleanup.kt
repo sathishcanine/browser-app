@@ -1,10 +1,10 @@
 package com.browser.minnal.html.bookmark
 
 import com.browser.minnal.migration.Cleanup
+import com.browser.minnal.migration.GeneratedHtmlFiles
 import android.app.Application
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.File
 import javax.inject.Inject
 
 class BookmarkCleanup @Inject constructor(
@@ -14,9 +14,7 @@ class BookmarkCleanup @Inject constructor(
 
     override suspend fun execute() {
         withContext(Dispatchers.IO) {
-            application.filesDir.listFiles()
-                ?.filter { it.endsWith(BookmarkPageFactory.FILENAME) }
-                ?.forEach(File::delete)
+            GeneratedHtmlFiles.deletePage(application, BookmarkPageFactory.FILENAME)
         }
     }
 }

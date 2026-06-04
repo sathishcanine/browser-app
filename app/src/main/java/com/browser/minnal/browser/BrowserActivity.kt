@@ -223,8 +223,6 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
     private var wantsBookmarkNativeAdStrip = false
 
     /** First [onResume] after a fresh launch (not return from background). */
-    private var ratingPromptColdStartResume = false
-
     /**
      * True if the activity is operating in incognito mode, false otherwise.
      */
@@ -249,7 +247,6 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
             finish()
             return
         }
-        ratingPromptColdStartResume = savedInstanceState == null
         if (savedInstanceState != null) {
             interstitialAccumulatedActiveMs = savedInstanceState.getLong(
                 STATE_INTERSTITIAL_ACCUMULATED_MS,
@@ -878,9 +875,7 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         if (!isBrowserUiInitialized) {
             return
         }
-        val coldStartResume = ratingPromptColdStartResume
-        ratingPromptColdStartResume = false
-        presenter.onViewShown(isColdStartResume = coldStartResume)
+        presenter.onViewShown()
         if (!isIncognito()) {
             activeTimeInterstitialController.onBrowserResumed(this) {
                 customView == null && !isFinishing
@@ -1144,20 +1139,24 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
                 return@postDelayed
             }
             presenter.onRatingPromptShown()
-            RatingPromptDialog.show(
-                activity = this,
-                onRated = {
-                    ratingPromptHelper.markRated()
-                    presenter.onRatingPromptDismissed()
-                    appOpenAdManager.notifyBlockingOverlayDismissed()
-                },
-                onLater = {
-                    ratingPromptHelper.snoozeUntilNextDay()
-                    presenter.onRatingPromptDismissed()
-                    appOpenAdManager.notifyBlockingOverlayDismissed()
-                },
-            )
-        }, 150L)
+            runCatching {
+                RatingPromptDialog.show(
+                    activity = this,
+                    onRated = {
+                        ratingPromptHelper.markRated()
+                        presenter.onRatingPromptDismissed()
+                        appOpenAdManager.notifyBlockingOverlayDismissed()
+                    },
+                    onLater = {
+                        ratingPromptHelper.snoozeUntilNextDay()
+                        presenter.onRatingPromptDismissed()
+                        appOpenAdManager.notifyBlockingOverlayDismissed()
+                    },
+                )
+            }.onFailure {
+                presenter.onRatingPromptDismissed()
+            }
+        }, RATING_PROMPT_DELAY_AFTER_DOWNLOAD_MS)
     }
 
     private fun createGridTabsAdapter(): GridTabRecyclerViewAdapter =
@@ -1646,6 +1645,7 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
     }
 
     private companion object {
+        private const val RATING_PROMPT_DELAY_AFTER_DOWNLOAD_MS = 2_000L
         private const val DEFAULT_BROWSER_PROMPT_MIN_INTERVAL_MS = 24L * 60 * 60 * 1000
         private const val DEFAULT_BROWSER_SNOOZE_MS = 24L * 60 * 60 * 1000
         private const val STATE_INTERSTITIAL_ACCUMULATED_MS = "interstitial_accumulated_active_ms"

@@ -89,6 +89,7 @@ class TabAdapter @AssistedInject constructor(
     private val downloadsSubject = PublishSubject.create<PendingDownload>()
     private val backgroundTabUrlSubject = PublishSubject.create<String>()
     private val addShortcutSubject = PublishSubject.create<Unit>()
+    private val ratingPromptRequestSubject = PublishSubject.create<Unit>()
     private val promoteToOpenerSubject = PublishSubject.create<String>()
     private val focusObservable = BehaviorSubject.createDefault(false)
 
@@ -111,7 +112,9 @@ class TabAdapter @AssistedInject constructor(
             // gate (only honors calls from the in-app downloads page), so registering it
             // globally is safe and lets the page survive across navigations within the same tab.
             addJavascriptInterface(
-                DownloadsBridge(this, minnalDownloadManager),
+                DownloadsBridge(this, minnalDownloadManager) {
+                    ratingPromptRequestSubject.onNext(Unit)
+                },
                 DownloadsBridge.NAME
             )
             // Bridge to the news / discovery feed shown on the home / bookmarks page. Same
@@ -331,6 +334,9 @@ class TabAdapter @AssistedInject constructor(
 
     override fun addShortcutRequests(): Observable<Unit> =
         addShortcutSubject.hide()
+
+    override fun ratingPromptRequests(): Observable<Unit> =
+        ratingPromptRequestSubject.hide()
 
     override fun closeWindowRequests(): Observable<Unit> =
         tabWebChromeClient.closeWindowObservable.hide()

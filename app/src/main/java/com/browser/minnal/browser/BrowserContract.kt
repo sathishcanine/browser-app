@@ -42,7 +42,7 @@ interface BrowserContract {
         fun playBackgroundTabAddedAnimation()
 
         /**
-         * Show the Play Store rating prompt when eligible (home screen on cold app open).
+         * Show the Play Store rating prompt when eligible (downloads page after a completion).
          */
         fun showRatingPromptIfEligible()
 

@@ -28,7 +28,7 @@ class OnboardingActivity : AppCompatActivity() {
          * True for a brand-new install that has not finished onboarding.
          *
          * [UserPreferences.firstLaunchEpochMs] is also checked so upgrades from builds before
-         * onboarding (which already recorded install time for the rating prompt) skip the carousel
+         * onboarding skip the carousel
          * without treating them as a fresh install.
          */
         fun shouldShow(userPreferences: UserPreferences): Boolean =

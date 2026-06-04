@@ -28,11 +28,13 @@ import com.browser.minnal.utils.isDownloadsUrl
  * MinnalDownloads.retry(url)
  * MinnalDownloads.deleteEntry(url, alsoDeleteFile)
  * MinnalDownloads.openFile(localPath, mimeType)       // -> boolean
+ * MinnalDownloads.requestRatingPromptIfEligible()     // after a download completes on this page
  * ```
  */
 class DownloadsBridge(
     private val webView: WebView,
     private val manager: MinnalDownloadManager,
+    private val onRequestRatingPrompt: () -> Unit = {},
 ) {
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -86,6 +88,14 @@ class DownloadsBridge(
     fun openFile(localPath: String?, mimeType: String?): Boolean {
         if (!isOnDownloadsPage()) return false
         return manager.openCommittedFile(localPath, mimeType)
+    }
+
+    /** Called from the downloads page when a row transitions to COMPLETED. */
+    @JavascriptInterface
+    fun requestRatingPromptIfEligible(): Boolean {
+        if (!isOnDownloadsPage()) return false
+        mainHandler.post(onRequestRatingPrompt)
+        return true
     }
 
     /**

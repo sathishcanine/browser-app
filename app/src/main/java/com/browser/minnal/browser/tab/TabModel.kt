@@ -246,6 +246,11 @@ interface TabModel {
     fun addShortcutRequests(): Observable<Unit>
 
     /**
+     * Emits when the downloads page requests the Play Store rating prompt after a completion.
+     */
+    fun ratingPromptRequests(): Observable<Unit>
+
+    /**
      * Emits requests by the browser to automatically close the current tab.
      */
     fun closeWindowRequests(): Observable<Unit>

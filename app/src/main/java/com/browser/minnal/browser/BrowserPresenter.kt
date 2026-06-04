@@ -53,13 +53,11 @@ import com.browser.minnal.utils.isHistoryUrl
 import com.browser.minnal.utils.isSpecialUrl
 import android.graphics.Bitmap
 import android.net.Uri
+import java.util.concurrent.ConcurrentHashMap
 import com.browser.minnal.utils.smartUrlFilter
 import com.browser.minnal.utils.value
 import androidx.activity.result.ActivityResult
 import androidx.core.net.toUri
-import androidx.lifecycle.DefaultLifecycleObserver
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.ProcessLifecycleOwner
 import java.util.concurrent.TimeUnit
 import com.browser.minnal.utils.WebUtils
 import io.reactivex.rxjava3.core.Completable
@@ -112,18 +110,14 @@ class BrowserPresenter @Inject constructor(
 
     private var ratingPromptScheduled = false
 
-    /** True until the user backgrounds the app; only then may the home-screen prompt show. */
-    private var ratingPromptEligibleOnColdStart = false
+    private var pendingRatingPromptAfterDownload = false
 
-    /** Home prompt was deferred (e.g. app-open ad); retry without waiting for resume. */
-    private var pendingRatingPromptOnHome = false
+    /** Set when a download finishes but the prompt could not be shown (background / wrong tab). */
+    private var deferredRatingPromptAfterDownload = false
 
-    private var coldStartRatingRetriesScheduled = false
+    private val downloadStatusByUrl = ConcurrentHashMap<String, DownloadStatus>()
 
     private var isBrowserInForeground = false
-
-    /** Clears cold-start rating eligibility when the app leaves foreground (not activity pause). */
-    private var processStopObserver: DefaultLifecycleObserver? = null
 
     private var view: BrowserContract.View? = null
     private var viewState: BrowserViewState = BrowserViewState(
@@ -168,19 +162,6 @@ class BrowserPresenter @Inject constructor(
     fun onViewAttached(view: BrowserContract.View) {
         this.view = view
         view.updateState(viewState)
-        ratingPromptHelper.recordFirstLaunchIfNeeded()
-        if (!incognitoMode) {
-            appOpenAdManager.setOnAppOpenFlowIdleListener {
-                tryShowPendingRatingPromptIfNeeded()
-            }
-            processStopObserver = object : DefaultLifecycleObserver {
-                override fun onStop(owner: LifecycleOwner) {
-                    ratingPromptEligibleOnColdStart = false
-                    pendingRatingPromptOnHome = false
-                    coldStartRatingRetriesScheduled = false
-                }
-            }.also { ProcessLifecycleOwner.get().lifecycle.addObserver(it) }
-        }
 
         cookieAdministrator.adjustCookieSettings()
 
@@ -228,6 +209,23 @@ class BrowserPresenter @Inject constructor(
                 }
             }
 
+        // Native path: works even if an older cached downloads.html lacks the rating bridge.
+        compositeDisposable += minnalDownloadManager.changes()
+            .observeOn(mainScheduler)
+            .subscribeBy(
+                onNext = { state ->
+                    val previous = downloadStatusByUrl.put(state.url, state.status)
+                    if (state.status == DownloadStatus.COMPLETED &&
+                        previous != null &&
+                        previous != DownloadStatus.COMPLETED &&
+                        !incognitoMode
+                    ) {
+                        onInAppDownloadCompleted()
+                    }
+                },
+                onError = { /* RxJavaPlugins handles; must not crash the browser */ },
+            )
+
     }
 
     /**
@@ -235,25 +233,15 @@ class BrowserPresenter @Inject constructor(
      */
     fun onViewDetached() {
         view = null
-        processStopObserver?.let { ProcessLifecycleOwner.get().lifecycle.removeObserver(it) }
-        processStopObserver = null
 
         compositeDisposable.dispose()
         tabDisposable.dispose()
     }
 
-    /**
-     * Call when the browser activity is visible again ([android.app.Activity.onResume]).
-     *
-     * @param isColdStartResume true only for the first resume after a fresh activity launch
-     * (not when returning from background).
-     */
-    fun onViewShown(isColdStartResume: Boolean) {
+    /** Call when the browser activity is visible again ([android.app.Activity.onResume]). */
+    fun onViewShown() {
         isBrowserInForeground = true
-        if (isColdStartResume) {
-            ratingPromptEligibleOnColdStart = true
-            scheduleColdStartRatingPromptAttempts()
-        }
+        tryShowDeferredRatingPromptAfterDownload()
     }
 
     /**
@@ -380,26 +368,23 @@ class BrowserPresenter @Inject constructor(
             .subscribeOn(mainScheduler)
             .subscribeBy(onNext = navigator::download)
 
-        var previousTabUrl = tab.url
         tabDisposable += tab.urlChanges()
             .startWithItem(tab.url)
             .distinctUntilChanged()
             .subscribeOn(mainScheduler)
             .subscribeBy { url ->
-                if (ratingPromptEligibleOnColdStart && isHomeScreenUrl(url)) {
-                    maybeShowRatingPromptOnHome()
-                }
-                previousTabUrl = url
                 url.takeIf { !it.isSpecialUrl() && it.isNotBlank() }?.let {
                     historyRecord.visit(tab.title, it)
                 }
                 view?.showToolbar()
+                if (url.isDownloadsUrl()) {
+                    tryShowDeferredRatingPromptAfterDownload()
+                }
             }
 
-        if (ratingPromptEligibleOnColdStart) {
-            maybeShowRatingPromptOnHome()
-            scheduleColdStartRatingPromptAttempts()
-        }
+        tabDisposable += tab.ratingPromptRequests()
+            .subscribeOn(mainScheduler)
+            .subscribeBy { onInAppDownloadCompleted() }
 
         tabDisposable += tab.createWindowRequests()
             .subscribeOn(mainScheduler)
@@ -614,71 +599,86 @@ class BrowserPresenter @Inject constructor(
         view?.playBackgroundTabAddedAnimation()
     }
 
-    private fun maybeShowRatingPromptOnHome() {
-        if (!ratingPromptEligibleOnColdStart || incognitoMode || ratingPromptScheduled) {
+    /**
+     * A download just finished in-app. Multiple completions (e.g. five finishing in the
+     * background) are collapsed into a single prompt for this batch.
+     */
+    private fun onInAppDownloadCompleted() {
+        if (incognitoMode || !ratingPromptHelper.shouldShowRatingPrompt()) {
+            deferredRatingPromptAfterDownload = false
+            return
+        }
+        if (isRatingPromptAlreadyQueued()) {
+            if (!canShowRatingPromptOnDownloadsPage()) {
+                deferredRatingPromptAfterDownload = true
+            }
+            return
+        }
+        if (canShowRatingPromptOnDownloadsPage()) {
+            maybeShowRatingPromptAfterDownload()
+        } else {
+            deferredRatingPromptAfterDownload = true
+        }
+    }
+
+    private fun tryShowDeferredRatingPromptAfterDownload() {
+        if (!deferredRatingPromptAfterDownload) {
+            return
+        }
+        maybeShowRatingPromptAfterDownload()
+    }
+
+    private fun isRatingPromptShowInFlight(): Boolean =
+        pendingRatingPromptAfterDownload ||
+            ratingPromptScheduled ||
+            RatingPromptDialog.isShowing()
+
+    private fun isRatingPromptAlreadyQueued(): Boolean =
+        deferredRatingPromptAfterDownload || isRatingPromptShowInFlight()
+
+    private fun canShowRatingPromptOnDownloadsPage(): Boolean =
+        currentTab?.url?.isDownloadsUrl() == true && isBrowserInForeground
+
+    private fun maybeShowRatingPromptAfterDownload() {
+        if (incognitoMode || isRatingPromptShowInFlight()) {
             return
         }
         if (!ratingPromptHelper.shouldShowRatingPrompt()) {
+            deferredRatingPromptAfterDownload = false
             return
         }
-        if (!isHomeScreenUrl(currentTab?.url.orEmpty())) {
-            return
-        }
-        if (!isBrowserInForeground) {
+        if (!canShowRatingPromptOnDownloadsPage()) {
             return
         }
         if (appOpenAdManager.isBlockingRatingPrompt()) {
-            pendingRatingPromptOnHome = true
+            deferredRatingPromptAfterDownload = true
             return
         }
-        if (RatingPromptDialog.isShowing()) {
-            return
-        }
-        pendingRatingPromptOnHome = false
+        deferredRatingPromptAfterDownload = false
+        pendingRatingPromptAfterDownload = true
+        ratingPromptScheduled = true
         view?.showRatingPromptIfEligible()
     }
 
     fun onRatingPromptShown() {
         ratingPromptScheduled = true
-        pendingRatingPromptOnHome = false
-    }
-
-    private fun scheduleColdStartRatingPromptAttempts() {
-        if (!ratingPromptEligibleOnColdStart || coldStartRatingRetriesScheduled) {
-            return
-        }
-        coldStartRatingRetriesScheduled = true
-        COLD_START_RATING_RETRY_DELAYS_MS.forEach { delayMs ->
-            compositeDisposable += Completable.timer(delayMs, TimeUnit.MILLISECONDS, mainScheduler)
-                .subscribe { maybeShowRatingPromptOnHome() }
-        }
-    }
-
-    private fun tryShowPendingRatingPromptIfNeeded() {
-        if (!pendingRatingPromptOnHome || !ratingPromptEligibleOnColdStart) {
-            return
-        }
-        pendingRatingPromptOnHome = false
-        maybeShowRatingPromptOnHome()
+        pendingRatingPromptAfterDownload = false
+        deferredRatingPromptAfterDownload = false
     }
 
     fun onRatingPromptDismissed() {
         ratingPromptScheduled = false
-        pendingRatingPromptOnHome = false
-        ratingPromptEligibleOnColdStart = false
-        coldStartRatingRetriesScheduled = false
+        pendingRatingPromptAfterDownload = false
+        deferredRatingPromptAfterDownload = false
     }
 
-    /** Dialog could not be shown yet (e.g. no window focus); retry while still on cold start. */
+    /** Dialog could not be shown yet (e.g. no window focus); retry while still on downloads. */
     fun onRatingPromptDeferred() {
         ratingPromptScheduled = false
-        pendingRatingPromptOnHome = true
+        pendingRatingPromptAfterDownload = false
+        deferredRatingPromptAfterDownload = true
         compositeDisposable += Completable.timer(400, TimeUnit.MILLISECONDS, mainScheduler)
-            .subscribe { tryShowPendingRatingPromptIfNeeded() }
-    }
-
-    companion object {
-        private val COLD_START_RATING_RETRY_DELAYS_MS = longArrayOf(400L, 1_000L, 2_000L)
+            .subscribe { tryShowDeferredRatingPromptAfterDownload() }
     }
 
     private fun List<TabViewState>.tabIndexForId(id: Int?): Int =
