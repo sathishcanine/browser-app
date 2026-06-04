@@ -17,6 +17,7 @@ import android.view.inputmethod.InputMethodManager
 import android.webkit.WebView
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import androidx.core.view.ViewCompat
 import androidx.core.view.doOnLayout
 import javax.inject.Inject
 
@@ -107,6 +108,7 @@ class WebViewScrollCoordinator @Inject constructor(
 
     fun openBottomTabDrawer() {
         bottomTabsLayout?.root?.let { root ->
+            ViewCompat.requestApplyInsets(root)
             root.doOnLayout {
                 if (root.translationY > 0F) {
                     root.animateTranslation(0F)

@@ -103,6 +103,7 @@ import android.widget.TextView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.doOnLayout
+import androidx.core.view.updatePadding
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
@@ -286,10 +287,9 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
             )
             tabs.root.translationY = resources.displayMetrics.heightPixels.toFloat()
             binding.root.addView(tabs.root, params)
-            ViewCompat.setOnApplyWindowInsetsListener(tabs.root) { v, insets ->
-                val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-                v.setPadding(0, systemBars.top, 0, systemBars.bottom)
-                insets
+            ViewCompat.setOnApplyWindowInsetsListener(tabs.root) { v, _ ->
+                applyTabGridOverlayInsets(v)
+                WindowInsetsCompat.CONSUMED
             }
             tabs.root.post { ViewCompat.requestApplyInsets(tabs.root) }
             // Correct translationY after layout so the overlay is fully off-screen even
@@ -619,6 +619,22 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
             resources.getDimensionPixelSize(R.dimen.radial_fab_extra_bottom_inset)
         }
         radialFabMenu.setFabBottomInset(inset)
+    }
+
+    /**
+     * Pads the full-screen tab grid overlay so the toolbar clears the status bar / cutout and
+     * the Done button clears the navigation bar. Uses root window insets because the overlay
+     * is a sibling of [DrawerLayout] (which consumes dispatched insets via fitsSystemWindows).
+     */
+    private fun applyTabGridOverlayInsets(overlay: View) {
+        val rootInsets = ViewCompat.getRootWindowInsets(overlay)
+            ?: ViewCompat.getRootWindowInsets(binding.root)
+            ?: return
+        val topInsetTypes = WindowInsetsCompat.Type.statusBars() or
+            WindowInsetsCompat.Type.displayCutout()
+        val top = rootInsets.getInsets(topInsetTypes).top
+        val bottom = rootInsets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+        overlay.updatePadding(top = top, bottom = bottom)
     }
 
     private fun applyBottomAddressBarLayout() {
@@ -1423,6 +1439,10 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         inputMethodManager.hideSoftInputFromWindow(binding.root.windowToken, 0)
         clearTabGridSearch()
         presenter.onTabDrawerMoved(isOpen = true)
+        bottomTabsBinding?.root?.let { overlay ->
+            applyTabGridOverlayInsets(overlay)
+            ViewCompat.requestApplyInsets(overlay)
+        }
         tabPager.openBottomTabDrawer()
         if (pendingScroll != -1) {
             activeRecyclerView?.scrollToPosition(pendingScroll)

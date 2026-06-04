@@ -52,7 +52,10 @@ class SettingsActivity : ThemableSettingsActivity(),
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        finish()
-        return true
+        if (item.itemId == android.R.id.home) {
+            onBackPressedDispatcher.onBackPressed()
+            return true
+        }
+        return super.onOptionsItemSelected(item)
     }
 }
