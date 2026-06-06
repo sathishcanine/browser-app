@@ -124,7 +124,12 @@ class DownloadPermissionsHelper @Inject constructor(
                 return@OnClickListener
             }
             dialog.dismiss()
-            showRewardedAdThenDownload(activity, fileName, downloadParams)
+            // Wait for the gate dialog to finish dismissing before showing the loading overlay.
+            activity.window?.decorView?.post {
+                if (!activity.isFinishing && !activity.isDestroyed) {
+                    showRewardedAdThenDownload(activity, fileName, downloadParams)
+                }
+            }
         }
         val dialog: Dialog = AlertDialog.Builder(activity)
             .setTitle(fileName)

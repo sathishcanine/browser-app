@@ -1,11 +1,10 @@
 package com.browser.minnal.ads
 
-import com.browser.minnal.DefaultBrowserActivity
+import com.browser.minnal.browser.BrowserActivity
 import com.browser.minnal.preference.UserPreferences
 import com.browser.minnal.rating.RatingPromptDialog
 import android.app.Activity
 import android.app.Application
-import android.os.Build
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
@@ -41,7 +40,7 @@ class AppOpenAdManager @Inject constructor(
     /** Set in [onStop] when the user leaves the app; cleared after a show attempt on resume. */
     private var pendingShowOnNextBrowserResume = false
 
-    private var resumedBrowserActivity: DefaultBrowserActivity? = null
+    private var resumedBrowserActivity: BrowserActivity? = null
 
     /** Prevents showing again after dismiss until the next background → foreground cycle. */
     private var showedAdThisForegroundSession = false
@@ -61,7 +60,7 @@ class AppOpenAdManager @Inject constructor(
     private var onAppOpenFlowIdleListener: (() -> Unit)? = null
 
     fun start() {
-        if (started || isIncognitoProcess()) {
+        if (started) {
             return
         }
         started = true
@@ -158,16 +157,16 @@ class AppOpenAdManager @Inject constructor(
     }
 
     override fun onActivityStopped(activity: Activity) {
-        if (activity is DefaultBrowserActivity) {
+        if (activity is BrowserActivity) {
             browserActivityWasStopped = true
         }
     }
 
     override fun onActivityResumed(activity: Activity) {
-        if (activity is DefaultBrowserActivity) {
+        if (activity is BrowserActivity) {
             resumedBrowserActivity = activity
         }
-        if (activity !is DefaultBrowserActivity) {
+        if (activity !is BrowserActivity) {
             return
         }
         if (!wasAppBackgrounded || showedAdThisForegroundSession) {
@@ -189,7 +188,7 @@ class AppOpenAdManager @Inject constructor(
         }
     }
 
-    private fun tryShowOnResume(activity: DefaultBrowserActivity) {
+    private fun tryShowOnResume(activity: BrowserActivity) {
         if (!isAppOpenAdEligible()) {
             finishAppOpenForegroundFlow()
             return
@@ -272,7 +271,7 @@ class AppOpenAdManager @Inject constructor(
         onAppOpenFlowIdleListener?.invoke()
     }
 
-    private fun preload(activity: DefaultBrowserActivity) {
+    private fun preload(activity: BrowserActivity) {
         if (!canRequestOrShowAppOpenAd() || activity.isFinishing || activity.isDestroyed) {
             return
         }
@@ -343,16 +342,9 @@ class AppOpenAdManager @Inject constructor(
         if (resumedBrowserActivity === activity) {
             resumedBrowserActivity = null
         }
-        if (activity is DefaultBrowserActivity) {
+        if (activity is BrowserActivity && !activity.isIncognito()) {
             setDefaultBrowserPromptVisible(false)
             setDefaultBrowserSystemFlowActive(false)
         }
-    }
-
-    private fun isIncognitoProcess(): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            return Application.getProcessName().endsWith(":incognito")
-        }
-        return false
     }
 }

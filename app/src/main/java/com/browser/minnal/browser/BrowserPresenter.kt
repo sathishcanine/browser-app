@@ -36,6 +36,7 @@ import com.browser.minnal.database.downloads.DownloadEntry
 import com.browser.minnal.database.downloads.DownloadStatus
 import com.browser.minnal.database.downloads.DownloadsRepository
 import com.browser.minnal.database.history.HistoryRepository
+import com.browser.minnal.ads.RewardedDownloadAdHelper
 import com.browser.minnal.download.manager.MinnalDownloadManager
 import com.browser.minnal.html.bookmark.BookmarkPageFactory
 import com.browser.minnal.html.history.HistoryPageFactory
@@ -105,6 +106,7 @@ class BrowserPresenter @Inject constructor(
     private val popupTabGate: PopupTabGate,
     private val ratingPromptHelper: RatingPromptHelper,
     private val appOpenAdManager: AppOpenAdManager,
+    private val rewardedDownloadAdHelper: RewardedDownloadAdHelper,
     @IncognitoMode private val incognitoMode: Boolean
 ) {
 
@@ -194,13 +196,13 @@ class BrowserPresenter @Inject constructor(
                 selectTab(model.selectTab(tabToSelect))
             }
 
-        // When the user accepts a download (the in-built downloader pushes a PENDING state right
-        // after enqueueing the work), pop them straight into the Downloads tab so they can see
-        // live progress without hunting through the menu. We skip the auto-open if they're
+        // When the user accepts a download, pop them straight into the Downloads tab so they can
+        // see live progress without hunting through the menu. We skip the auto-open if they're
         // already on a downloads page to avoid stacking duplicate tabs when several downloads
         // are kicked off in quick succession.
         compositeDisposable += minnalDownloadManager.changes()
-            .filter { it.status == DownloadStatus.PENDING }
+            .filter { it.status == DownloadStatus.RUNNING }
+            .filter { !rewardedDownloadAdHelper.isDownloadRewardFlowActive }
             .observeOn(mainScheduler)
             .subscribeBy { _ ->
                 if (currentTab?.url?.isDownloadsUrl() != true) {
@@ -886,10 +888,10 @@ class BrowserPresenter @Inject constructor(
         url.isStartPageUrl() || url.isBookmarkUrl()
 
     private fun computeShowBookmarkNativeAdStrip(url: String): Boolean =
-        !url.isBookmarkUrl() && !url.isDownloadsUrl() && !incognitoMode
+        !url.isBookmarkUrl() && !url.isDownloadsUrl()
 
     private fun computeShowDownloadsNativeAdStrip(url: String): Boolean =
-        url.isDownloadsUrl() && !incognitoMode
+        url.isDownloadsUrl()
 
     /**
      * Call when the user clicks on the home button.

@@ -6,6 +6,7 @@ import com.browser.minnal.adblock.UserPreferenceAdBlocker
 import com.browser.minnal.browser.BrowserContract
 import com.browser.minnal.browser.data.CookieAdministrator
 import com.browser.minnal.browser.data.DefaultCookieAdministrator
+import com.browser.minnal.browser.data.IncognitoCookieAdministrator
 import com.browser.minnal.browser.history.DefaultHistoryRecord
 import com.browser.minnal.browser.history.HistoryRecord
 import com.browser.minnal.browser.history.NoOpHistoryRecord
@@ -88,7 +89,7 @@ class Browser2Module {
     fun providesCookieAdministrator(
         @IncognitoMode incognitoMode: Boolean,
         defaultCookieAdministrator: DefaultCookieAdministrator,
-        incognitoCookieAdministrator: DefaultCookieAdministrator
+        incognitoCookieAdministrator: IncognitoCookieAdministrator,
     ): CookieAdministrator = if (incognitoMode) {
         incognitoCookieAdministrator
     } else {

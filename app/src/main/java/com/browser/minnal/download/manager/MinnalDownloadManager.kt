@@ -8,12 +8,6 @@ import android.text.format.Formatter
 import android.webkit.MimeTypeMap
 import android.webkit.URLUtil
 import androidx.core.content.FileProvider
-import androidx.work.BackoffPolicy
-import androidx.work.Constraints
-import androidx.work.Data
-import androidx.work.ExistingWorkPolicy
-import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.browser.minnal.BuildConfig
 import com.browser.minnal.database.downloads.DownloadEntry
@@ -22,20 +16,20 @@ import com.browser.minnal.database.downloads.DownloadsRepository
 import com.browser.minnal.log.Logger
 import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.disposables.Disposable
+import io.reactivex.rxjava3.schedulers.Schedulers
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
  * Public-facing API for enqueueing / cancelling downloads. The browser only ever talks to
- * this class; everything else (engine, worker, storage, notifications) is plumbing that this
+ * this class; everything else (engine, runner, storage, notifications) is plumbing that this
  * coordinator wires together.
  *
- * Concurrency model: each URL is owned by exactly one work request, identified by the URL's
- * unique work name. Re-enqueueing the same URL is idempotent (`KEEP` policy).
+ * Downloads start immediately via [DownloadRunner] (Chrome-style). WorkManager is only used to
+ * cancel legacy work requests; new enqueues never sit in [DownloadStatus.PENDING].
  */
 @Singleton
 class MinnalDownloadManager @Inject constructor(
@@ -44,7 +38,8 @@ class MinnalDownloadManager @Inject constructor(
     private val stateBus: DownloadStateBus,
     private val notifier: DownloadNotifier,
     private val storage: DownloadStorage,
-    private val logger: Logger
+    private val downloadRunner: DownloadRunner,
+    private val logger: Logger,
 ) {
 
     /**
@@ -59,16 +54,40 @@ class MinnalDownloadManager @Inject constructor(
     fun snapshots(): Map<String, DownloadState> = stateBus.all()
 
     /**
-     * Enqueue a new download. If a work request already exists for [url] (download already
-     * in progress) this is a no-op. The DB row is upserted synchronously via Rx so callers
-     * can immediately see it on the in-app Downloads page.
+     * Restart any downloads that were interrupted by process death. Call from [Application.onCreate].
+     */
+    fun resumeActiveDownloads() {
+        repository.getAllDownloads()
+            .subscribeOn(Schedulers.io())
+            .subscribe(
+                { entries ->
+                    for (entry in entries) {
+                        when (DownloadStatus.fromName(entry.status)) {
+                            DownloadStatus.PENDING,
+                            DownloadStatus.RUNNING,
+                            DownloadStatus.RETRYING -> {
+                                if (!downloadRunner.isActive(entry.url)) {
+                                    downloadRunner.start(entry.url)
+                                }
+                            }
+                            else -> Unit
+                        }
+                    }
+                },
+                { logger.log(TAG, "resumeActiveDownloads failed", it) },
+            )
+    }
+
+    /**
+     * Enqueue a new download. Transfers begin immediately in-process; the UI shows RUNNING
+     * (not Queued) from the first frame.
      */
     fun enqueue(
         url: String,
         userAgent: String?,
         contentDisposition: String?,
         mimeType: String?,
-        contentLength: Long
+        contentLength: Long,
     ): Disposable {
         val resolvedFileName = URLUtil.guessFileName(url, contentDisposition, mimeType)
         val resolvedMimeType = mimeType?.takeIf { it.isNotBlank() }
@@ -80,61 +99,57 @@ class MinnalDownloadManager @Inject constructor(
             "?"
         }
         val now = System.currentTimeMillis()
+        val totalBytes = if (contentLength > 0) contentLength else -1L
         val entry = DownloadEntry(
             url = url,
             title = resolvedFileName,
             contentSize = readableSize,
-            status = DownloadStatus.PENDING.name,
+            status = DownloadStatus.RUNNING.name,
             mimeType = resolvedMimeType,
             userAgent = userAgent,
             cookies = null,
-            totalBytes = if (contentLength > 0) contentLength else -1L,
+            totalBytes = totalBytes,
             bytesDownloaded = 0L,
             localPath = null,
             eTag = null,
             lastModified = null,
             createdAt = now,
             updatedAt = now,
-            errorMessage = null
+            errorMessage = null,
         )
 
-        // Surface the new entry in the bus immediately so the UI can render it before WorkManager
-        // even starts the worker.
         stateBus.update(
             DownloadState(
                 url = entry.url,
                 title = entry.title,
-                status = DownloadStatus.PENDING,
+                status = DownloadStatus.RUNNING,
                 bytesDownloaded = 0L,
-                totalBytes = entry.totalBytes
-            )
+                totalBytes = entry.totalBytes,
+            ),
         )
+        notifier.updateProgress(entry.url, entry.title, 0L, entry.totalBytes)
 
         return repository.upsertDownload(entry).subscribe(
             {
-                scheduleWork(url)
-                logger.log(TAG, "Enqueued download: ${entry.title} ($url)")
+                downloadRunner.start(url)
+                logger.log(TAG, "Started download: ${entry.title} ($url)")
             },
-            { logger.log(TAG, "Failed to upsert download row for $url", it) }
+            { logger.log(TAG, "Failed to upsert download row for $url", it) },
         )
     }
 
     /**
-     * Cancel a download. Removes the work request, marks the row CANCELLED, deletes any
+     * Cancel a download. Stops the in-process runner, marks the row CANCELLED, deletes any
      * partial bytes and clears the notification.
-     *
-     * If [also remove from the DB] is desired, callers should additionally invoke
-     * [DownloadsRepository.deleteDownload] after cancel.
      */
     fun cancel(url: String) {
         stateBus.clearPauseRequested(url)
+        downloadRunner.cancelActive(url)
         WorkManager.getInstance(application).cancelUniqueWork(workName(url))
-        // The worker's CancellationException handler already does the DB / staging cleanup,
-        // but if the worker hasn't started yet we still need to apply terminal state.
         repository.updateStatus(
             url = url,
             status = DownloadStatus.CANCELLED,
-            errorMessage = null
+            errorMessage = null,
         ).subscribe({}, { logger.log(TAG, "cancel: status update failed", it) })
         runCatching { storage.deleteStaging(url) }
         notifier.cancel(url)
@@ -144,10 +159,7 @@ class MinnalDownloadManager @Inject constructor(
     }
 
     /**
-     * Pause a download. Implemented as "mark PAUSED, then cancel the worker". Bytes on disk are
-     * kept; [DownloadWorker] must see PAUSED when handling cancellation so it does not treat pause
-     * as a full cancel (which would delete staging). [resume] restarts the worker, which
-     * Range-resumes using validators on the row.
+     * Pause a download. Cancels the in-process runner; bytes on disk are kept for resume.
      */
     fun pause(url: String) {
         stateBus.markPauseRequested(url)
@@ -160,6 +172,7 @@ class MinnalDownloadManager @Inject constructor(
             stateBus.snapshot(url)?.let {
                 stateBus.update(it.copy(status = DownloadStatus.PAUSED, errorMessage = null))
             }
+            downloadRunner.cancelActive(url)
             WorkManager.getInstance(application).cancelUniqueWork(workName(url))
         }.onFailure {
             stateBus.clearPauseRequested(url)
@@ -173,19 +186,19 @@ class MinnalDownloadManager @Inject constructor(
         runCatching {
             repository.updateStatus(
                 url = url,
-                status = DownloadStatus.PENDING,
+                status = DownloadStatus.RUNNING,
                 errorMessage = null,
             ).blockingAwait()
             val snapshot = stateBus.snapshot(url)
             if (snapshot != null) {
                 stateBus.update(
                     snapshot.copy(
-                        status = DownloadStatus.PENDING,
+                        status = DownloadStatus.RUNNING,
                         errorMessage = null,
                     ),
                 )
             }
-            scheduleWork(url)
+            downloadRunner.start(url)
         }.onFailure { logger.log(TAG, "resume failed for $url", it) }
     }
 
@@ -194,32 +207,25 @@ class MinnalDownloadManager @Inject constructor(
 
     /**
      * Remove a download from the manager entirely.
-     *
-     *  - If the worker is still running, cancels it first.
-     *  - Deletes any partial bytes from the staging cache.
-     *  - When [alsoDeleteFile] is true and the entry was already committed, attempts to
-     *    delete the published file too (works for both legacy file paths and MediaStore URIs).
-     *  - Removes the row from SQLite, drops the bus snapshot and clears any leftover
-     *    notification.
      */
     fun deleteEntry(url: String, alsoDeleteFile: Boolean) {
+        downloadRunner.cancelActive(url)
         WorkManager.getInstance(application).cancelUniqueWork(workName(url))
         runCatching { storage.deleteStaging(url) }
         if (alsoDeleteFile) {
             repository.findDownloadForUrl(url).subscribe(
                 { entry -> storage.deleteCommitted(entry.localPath) },
-                { logger.log(TAG, "deleteEntry: lookup failed", it) }
+                { logger.log(TAG, "deleteEntry: lookup failed", it) },
             )
         }
         repository.deleteDownload(url).subscribe(
             { stateBus.forget(url); notifier.cancel(url) },
-            { logger.log(TAG, "deleteEntry: db delete failed", it) }
+            { logger.log(TAG, "deleteEntry: db delete failed", it) },
         )
     }
 
     /**
      * Returns true if Android successfully launched a viewer for the previously committed file.
-     * The page calls this when the user taps "Open" on a completed row.
      */
     fun openCommittedFile(localPath: String?, mimeType: String?): Boolean {
         if (localPath.isNullOrBlank()) return false
@@ -227,7 +233,6 @@ class MinnalDownloadManager @Inject constructor(
             when {
                 localPath.startsWith("content://") -> Uri.parse(localPath)
                 localPath.startsWith("file://") -> {
-                    // Legacy file:// URIs would crash on API 24+; convert via FileProvider.
                     val file = File(Uri.parse(localPath).path ?: return false)
                     if (!file.exists()) return false
                     fileProviderUri(file)
@@ -253,13 +258,11 @@ class MinnalDownloadManager @Inject constructor(
     private fun fileProviderUri(file: File): Uri = FileProvider.getUriForFile(
         application,
         "${BuildConfig.APPLICATION_ID}.fileprovider",
-        file
+        file,
     )
 
     /**
-     * Build a JSON snapshot of every known download (DB rows + live bus state merged), suitable
-     * for handing to the JS-side download manager UI. Live bus snapshots take precedence over
-     * persisted rows so the page sees up-to-date progress and speed.
+     * Build a JSON snapshot of every known download (DB rows + live bus state merged).
      */
     fun getDownloadsJson(): String {
         val persisted = repository.getAllDownloads().blockingGet().orEmpty()
@@ -268,10 +271,14 @@ class MinnalDownloadManager @Inject constructor(
         for (entry in persisted) {
             merged[entry.url] = entry.toJson()
         }
-        // Bus values may include URLs that aren't yet persisted (PENDING just enqueued); add them.
         for ((url, state) in live) {
             val base = merged[url] ?: JSONObject().also { merged[url] = it }
-            state.applyOnto(base)
+            val persistedStatus = base.optString("status")
+            if (isTerminalPersistedStatus(persistedStatus)) {
+                state.applyEphemeralOnto(base)
+            } else {
+                state.applyOnto(base)
+            }
         }
         val arr = JSONArray()
         for (json in merged.values) arr.put(json)
@@ -290,7 +297,6 @@ class MinnalDownloadManager @Inject constructor(
         put("createdAt", createdAt)
         put("updatedAt", updatedAt)
         putOpt("errorMessage", errorMessage)
-        // Default ephemeral fields; the bus may overwrite them below.
         put("bytesPerSecond", 0)
     }
 
@@ -307,20 +313,16 @@ class MinnalDownloadManager @Inject constructor(
         if (errorMessage != null) target.put("errorMessage", errorMessage)
     }
 
-    private fun scheduleWork(url: String) {
-        val request = OneTimeWorkRequestBuilder<DownloadWorker>()
-            .setInputData(Data.Builder().putString(DownloadWorker.INPUT_URL, url).build())
-            .setConstraints(
-                Constraints.Builder()
-                    .setRequiredNetworkType(NetworkType.CONNECTED)
-                    .build()
-            )
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
-            .addTag(DownloadWorker.workTagFor(url))
-            .build()
-        WorkManager.getInstance(application)
-            .enqueueUniqueWork(workName(url), ExistingWorkPolicy.REPLACE, request)
+    private fun DownloadState.applyEphemeralOnto(target: JSONObject) {
+        target.put("bytesPerSecond", bytesPerSecond)
+        target.put("updatedAt", updatedAt)
     }
+
+    private fun isTerminalPersistedStatus(status: String): Boolean =
+        status == DownloadStatus.COMPLETED.name ||
+            status == DownloadStatus.FAILED.name ||
+            status == DownloadStatus.CANCELLED.name ||
+            status == DownloadStatus.PAUSED.name
 
     private fun workName(url: String): String = "minnal-download-" + url.hashCode().toString()
 

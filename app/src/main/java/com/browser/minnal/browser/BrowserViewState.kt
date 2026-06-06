@@ -24,8 +24,8 @@ import android.graphics.Bitmap
  * @param isRootFolder True if the current bookmark folder is the root folder, false if it is a
  * child folder.
  * @param findInPage The text that we are searching the page for.
- * @param showBookmarkNativeAdStrip True on non-bookmark, non-downloads pages (non-incognito) so the home native ad strip may show once per session.
- * @param showDownloadsNativeAdStrip True when the in-app downloads page is shown (non-incognito).
+ * @param showBookmarkNativeAdStrip True on non-bookmark, non-downloads pages so the home native ad strip may show once per session.
+ * @param showDownloadsNativeAdStrip True when the in-app downloads page is shown.
  */
 data class BrowserViewState(
     // search bar

@@ -70,6 +70,13 @@
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="${admobAppId}" />
+        <!-- Required so rewarded/interstitial AdActivity runs in :incognito, not only the main process. -->
+        <activity
+            android:name="com.google.android.gms.ads.AdActivity"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|uiMode|screenSize|smallestScreenSize"
+            android:exported="false"
+            android:multiprocess="true"
+            tools:replace="android:multiprocess" />
         <meta-data
             android:name="android.webkit.WebView.MetricsOptOut"
             android:value="true" />

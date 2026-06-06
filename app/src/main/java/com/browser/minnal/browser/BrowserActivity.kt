@@ -9,6 +9,8 @@ import com.browser.minnal.ads.ActiveTimeInterstitialController
 import com.browser.minnal.ads.AppOpenAdManager
 import com.browser.minnal.ads.HomeScreenNativeAdScheduler
 import com.browser.minnal.ads.BookmarkNativeAdController
+import com.browser.minnal.ads.MobileAdsInitializer
+import com.browser.minnal.ads.RewardedDownloadAdHelper
 import com.browser.minnal.animation.AnimationUtils
 import com.browser.minnal.browser.bookmark.BookmarkRecyclerViewAdapter
 import com.browser.minnal.browser.color.ColorAnimator
@@ -220,6 +222,12 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
     @Inject
     internal lateinit var ratingPromptHelper: RatingPromptHelper
 
+    @Inject
+    internal lateinit var rewardedDownloadAdHelper: RewardedDownloadAdHelper
+
+    @Inject
+    internal lateinit var mobileAdsInitializer: MobileAdsInitializer
+
     private var wantsBookmarkNativeAdStrip = false
 
     /** First [onResume] after a fresh launch (not return from background). */
@@ -310,6 +318,10 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
             .incognitoMode(isIncognito())
             .build()
             .inject(this)
+
+        if (isIncognito()) {
+            bootstrapIncognitoAds()
+        }
 
         if (savedInstanceState != null) {
             activeTimeInterstitialController.restoreAccumulatedActiveMs(interstitialAccumulatedActiveMs)
@@ -412,21 +424,26 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         binding.bookmarkListView.adapter = bookmarksAdapter
         binding.bookmarkListView.layoutManager = LinearLayoutManager(this)
 
-        if (!isIncognito()) {
-            bookmarkNativeAdController = BookmarkNativeAdController.forBookmarks(
-                this,
-                binding.bookmarkNativeAdStrip,
-            )
-            downloadsNativeAdController = BookmarkNativeAdController.forDownloads(
-                this,
-                binding.downloadsNativeAdStrip,
-            )
-            homeScreenNativeAdScheduler.setListener { eligible ->
-                applyBookmarkNativeAdStripVisibility(eligible)
-            }
+        bookmarkNativeAdController = BookmarkNativeAdController.forBookmarks(
+            this,
+            binding.bookmarkNativeAdStrip,
+        )
+        downloadsNativeAdController = BookmarkNativeAdController.forDownloads(
+            this,
+            binding.downloadsNativeAdStrip,
+        )
+        homeScreenNativeAdScheduler.setListener { eligible ->
+            applyBookmarkNativeAdStripVisibility(eligible)
         }
 
         presenter.onViewAttached(BrowserStateAdapter(this))
+        if (isIncognito()) {
+            mobileAdsInitializer.runWhenReady {
+                if (!isFinishing && !isDestroyed) {
+                    rewardedDownloadAdHelper.preload(this)
+                }
+            }
+        }
         if (!isIncognito()) {
             setupRadialFabMenu()
         }
@@ -826,15 +843,11 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         }
         dialog.setOnDismissListener {
             forceUpdateDialog = null
-            if (!isIncognito()) {
-                appOpenAdManager.setForceUpdateDialogVisible(false)
-            }
+            appOpenAdManager.setForceUpdateDialogVisible(false)
         }
         dialog.show()
         forceUpdateDialog = dialog
-        if (!isIncognito()) {
-            appOpenAdManager.setForceUpdateDialogVisible(true)
-        }
+        appOpenAdManager.setForceUpdateDialogVisible(true)
     }
 
     private fun startImmediatePlayUpdateFlow() {
@@ -908,8 +921,8 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
                 appOpenAdManager.setDefaultBrowserPromptVisible(false)
                 appOpenAdManager.setDefaultBrowserSystemFlowActive(false)
                 appOpenAdManager.setForceUpdateDialogVisible(false)
-                homeScreenNativeAdScheduler.destroy()
             }
+            homeScreenNativeAdScheduler.destroy()
             defaultBrowserPrompt?.dismiss()
             defaultBrowserPrompt = null
             forceUpdateDialog?.dismiss()
@@ -1026,11 +1039,7 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         }
         viewState.showBookmarkNativeAdStrip?.let { show ->
             wantsBookmarkNativeAdStrip = show
-            if (isIncognito()) {
-                bookmarkNativeAdController?.onPresenterShowBookmarkNativeAd(false)
-            } else {
-                homeScreenNativeAdScheduler.setHostPageVisible(show)
-            }
+            homeScreenNativeAdScheduler.setHostPageVisible(show)
         }
         viewState.showDownloadsNativeAdStrip?.let { show ->
             downloadsNativeAdController?.onPresenterShowBookmarkNativeAd(show)
@@ -1642,6 +1651,11 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
                 }
             },
         )
+    }
+
+    private fun bootstrapIncognitoAds() {
+        mobileAdsInitializer.startForIncognitoSession(this)
+        appOpenAdManager.start()
     }
 
     private companion object {

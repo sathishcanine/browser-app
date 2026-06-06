@@ -11,6 +11,7 @@ import com.browser.minnal.device.BuildInfo
 import com.browser.minnal.dialog.LightningDialogBuilder
 import com.browser.minnal.download.manager.DownloadEngine
 import com.browser.minnal.download.manager.DownloadNotifier
+import com.browser.minnal.download.manager.DownloadRunner
 import com.browser.minnal.download.manager.DownloadStateBus
 import com.browser.minnal.download.manager.DownloadStorage
 import com.browser.minnal.download.manager.MinnalDownloadManager
@@ -87,6 +88,8 @@ interface AppComponent {
     // [DownloadWorker] (instantiated by WorkManager via reflection) and
     // [DownloadActionReceiver] (instantiated by the Android framework).
     fun minnalDownloadManager(): MinnalDownloadManager
+
+    fun downloadRunner(): DownloadRunner
 
     fun downloadEngine(): DownloadEngine
 

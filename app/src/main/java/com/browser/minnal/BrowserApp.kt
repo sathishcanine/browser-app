@@ -8,6 +8,7 @@ import com.browser.minnal.database.bookmark.BookmarkExporter
 import com.browser.minnal.database.bookmark.BookmarkRepository
 import com.browser.minnal.device.BuildInfo
 import com.browser.minnal.device.BuildType
+import com.browser.minnal.download.manager.MinnalDownloadManager
 import com.browser.minnal.log.Logger
 import com.browser.minnal.migration.Cleanup
 import com.browser.minnal.utils.FileUtils
@@ -16,9 +17,11 @@ import android.app.Application
 import android.os.Build
 import android.os.StrictMode
 import android.util.Log
+import android.webkit.CookieManager
 import android.webkit.WebView
 import com.browser.minnal.ads.AppOpenAdManager
-import com.google.android.gms.ads.MobileAds
+import com.browser.minnal.ads.MobileAdsInitializer
+import com.browser.minnal.utils.isIncognitoProcess
 import com.google.firebase.FirebaseApp
 import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.firebase.crashlytics.FirebaseCrashlytics
@@ -60,6 +63,12 @@ class BrowserApp : Application(), Configuration.Provider {
     @Inject
     internal lateinit var appOpenAdManager: AppOpenAdManager
 
+    @Inject
+    internal lateinit var minnalDownloadManager: MinnalDownloadManager
+
+    @Inject
+    internal lateinit var mobileAdsInitializer: MobileAdsInitializer
+
     lateinit var applicationComponent: AppComponent
 
     override val workManagerConfiguration: Configuration =
@@ -74,21 +83,22 @@ class BrowserApp : Application(), Configuration.Provider {
         // :incognito process shares the default WebView data dir with the main process and crashes.
         // The Ads SDK also initializes WebView internally on API 28+, so set the main-process suffix
         // before MobileAds.initialize() to avoid "already initialized" / multi-process directory bugs.
+        val incognitoProcess = isIncognitoProcess()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            when (getProcessName()) {
-                "$packageName:incognito" -> {
+            when {
+                incognitoProcess -> {
                     File(dataDir, "app_webview_incognito").deleteRecursively()
                     WebView.setDataDirectorySuffix("incognito")
+                    // AdMob renders rewarded ads through an internal WebView; allow cookies in this
+                    // isolated process without affecting the main browser profile.
+                    CookieManager.getInstance().setAcceptCookie(true)
                 }
-                packageName -> WebView.setDataDirectorySuffix("main")
+                else -> WebView.setDataDirectorySuffix("main")
             }
         }
 
         runCatching { FirebaseApp.initializeApp(this) }
             .onFailure { Log.e(TAG, "FirebaseApp.initializeApp failed", it) }
-
-        runCatching { MobileAds.initialize(this) {} }
-            .onFailure { Log.e(TAG, "MobileAds.initialize failed", it) }
 
         // Crashlytics collection: firebase_crashlytics_collection_enabled in manifest (no getInstance here).
 
@@ -149,7 +159,11 @@ class BrowserApp : Application(), Configuration.Provider {
             .build()
         injector.inject(this)
 
-        appOpenAdManager.start()
+        if (!incognitoProcess) {
+            mobileAdsInitializer.start()
+            appOpenAdManager.start()
+        }
+        minnalDownloadManager.resumeActiveDownloads()
 
         Single.fromCallable(bookmarkModel::count)
             .filter { it == 0L }

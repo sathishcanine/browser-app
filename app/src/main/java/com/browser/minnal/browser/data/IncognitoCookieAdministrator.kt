@@ -1,23 +1,17 @@
 package com.browser.minnal.browser.data
 
-import com.browser.minnal.Capabilities
-import com.browser.minnal.isSupported
-import com.browser.minnal.preference.UserPreferences
 import android.webkit.CookieManager
 import javax.inject.Inject
 
 /**
- * The cookie administrator used to set cookie preferences for the incognito instance.
+ * Cookie settings for incognito tabs, which run in an isolated `:incognito` process.
+ *
+ * Browsing data in this process never mixes with normal mode. Cookies must stay enabled so
+ * AdMob's internal WebView can load rewarded ads; disabling them only breaks ads without
+ * adding meaningful privacy on top of the separate process.
  */
-class IncognitoCookieAdministrator @Inject constructor(
-    private val userPreferences: UserPreferences
-) : CookieAdministrator {
+class IncognitoCookieAdministrator @Inject constructor() : CookieAdministrator {
     override fun adjustCookieSettings() {
-        val cookieManager = CookieManager.getInstance()
-        if (Capabilities.FULL_INCOGNITO.isSupported) {
-            cookieManager.setAcceptCookie(userPreferences.cookiesEnabled)
-        } else {
-            cookieManager.setAcceptCookie(userPreferences.incognitoCookiesEnabled)
-        }
+        CookieManager.getInstance().setAcceptCookie(true)
     }
 }
