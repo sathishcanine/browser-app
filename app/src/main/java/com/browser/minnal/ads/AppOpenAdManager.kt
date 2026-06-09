@@ -18,8 +18,10 @@ import javax.inject.Singleton
  * Does not load or show during the install's first foreground session
  * ([UserPreferences.appOpenAdFirstSessionCompleted]), while blocking overlays are visible
  * (default-browser prompt, system default-browser picker, rating prompt), or on cold start.
- * Other full-screen UI (e.g. rating prompt) should wait until [isBlockingRatingPrompt] is false —
- * see [setOnAppOpenFlowIdleListener].
+ * After a background return triggers a show or load, further background returns within
+ * [APP_OPEN_AD_REQUEST_COOLDOWN_MS] are skipped (the cooldown anchor is that first request,
+ * not later skipped returns). Other full-screen UI (e.g. rating prompt) should wait until
+ * [isBlockingRatingPrompt] is false — see [setOnAppOpenFlowIdleListener].
  */
 @Singleton
 class AppOpenAdManager @Inject constructor(
@@ -58,6 +60,9 @@ class AppOpenAdManager @Inject constructor(
     private var forceUpdateDialogVisible = false
 
     private var onAppOpenFlowIdleListener: (() -> Unit)? = null
+
+    /** Epoch millis of the last app-open show/load started from a background return. */
+    private var lastAppOpenAdRequestTimeMs = 0L
 
     fun start() {
         if (started) {
@@ -196,6 +201,10 @@ class AppOpenAdManager @Inject constructor(
         if (!wasAppBackgrounded || showedAdThisForegroundSession || appOpenAdHelper.isShowingAd()) {
             return
         }
+        if (isWithinAppOpenAdRequestCooldown()) {
+            finishAppOpenForegroundFlow()
+            return
+        }
         if (!canRequestOrShowAppOpenAd()) {
             pendingShowAfterOverlayClear = true
             finishAppOpenForegroundFlow()
@@ -205,6 +214,7 @@ class AppOpenAdManager @Inject constructor(
             finishAppOpenForegroundFlow()
             return
         }
+        recordAppOpenAdRequest()
         if (appOpenAdHelper.showIfAvailable(activity)) {
             showedAdThisForegroundSession = true
             pendingShowOnNextBrowserResume = false
@@ -278,6 +288,17 @@ class AppOpenAdManager @Inject constructor(
         appOpenAdHelper.load(activity)
     }
 
+    private fun isWithinAppOpenAdRequestCooldown(): Boolean {
+        if (lastAppOpenAdRequestTimeMs == 0L) {
+            return false
+        }
+        return System.currentTimeMillis() - lastAppOpenAdRequestTimeMs < APP_OPEN_AD_REQUEST_COOLDOWN_MS
+    }
+
+    private fun recordAppOpenAdRequest() {
+        lastAppOpenAdRequestTimeMs = System.currentTimeMillis()
+    }
+
     private fun cancelInFlightForegroundAdRequest() {
         if (!awaitingAdForForeground) {
             return
@@ -346,5 +367,9 @@ class AppOpenAdManager @Inject constructor(
             setDefaultBrowserPromptVisible(false)
             setDefaultBrowserSystemFlowActive(false)
         }
+    }
+
+    private companion object {
+        private const val APP_OPEN_AD_REQUEST_COOLDOWN_MS = 7 * 60 * 1000L
     }
 }
