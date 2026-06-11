@@ -226,6 +226,10 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.10.0")
     implementation("com.anthonycr.mezzanine:core:$mezzanineVersion")
     implementation("com.google.android.gms:play-services-ads:23.6.0")
+    // AdMob mediation adapters (versions matched to play-services-ads 23.6.0).
+    implementation("com.google.ads.mediation:facebook:6.19.0.0")
+    implementation("com.unity3d.ads:unity-ads:4.13.1")
+    implementation("com.google.ads.mediation:unity:4.13.1.0")
     implementation("com.google.android.material:material:1.13.0")
     implementation("com.google.dagger:dagger:$daggerVersion")
     implementation("com.guolindev.permissionx:permissionx:1.8.1")
