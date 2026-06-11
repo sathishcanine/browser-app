@@ -153,3 +153,7 @@
     public <init>(android.content.Context,androidx.work.WorkerParameters);
 }
 -keepnames class com.browser.minnal.download.manager.DownloadWorker
+
+# Meta Audience Network (AdMob mediation:facebook) — Infer nullability annotations are compile-time only.
+-dontwarn com.facebook.infer.annotation.Nullsafe$Mode
+-dontwarn com.facebook.infer.annotation.Nullsafe
