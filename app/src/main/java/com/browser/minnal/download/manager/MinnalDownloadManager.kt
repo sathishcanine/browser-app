@@ -144,18 +144,26 @@ class MinnalDownloadManager @Inject constructor(
      */
     fun cancel(url: String) {
         stateBus.clearPauseRequested(url)
-        downloadRunner.cancelActive(url)
-        WorkManager.getInstance(application).cancelUniqueWork(workName(url))
-        repository.updateStatus(
-            url = url,
-            status = DownloadStatus.CANCELLED,
-            errorMessage = null,
-        ).subscribe({}, { logger.log(TAG, "cancel: status update failed", it) })
-        runCatching { storage.deleteStaging(url) }
-        notifier.cancel(url)
-        stateBus.snapshot(url)?.let {
-            stateBus.update(it.copy(status = DownloadStatus.CANCELLED))
-        }
+        runCatching {
+            repository.updateStatus(
+                url = url,
+                status = DownloadStatus.CANCELLED,
+                errorMessage = null,
+            ).blockingAwait()
+            stateBus.snapshot(url)?.let {
+                stateBus.update(
+                    it.copy(
+                        status = DownloadStatus.CANCELLED,
+                        errorMessage = null,
+                        bytesPerSecond = 0L,
+                    ),
+                )
+            }
+            downloadRunner.cancelActive(url)
+            WorkManager.getInstance(application).cancelUniqueWork(workName(url))
+            runCatching { storage.deleteStaging(url) }
+            notifier.cancel(url)
+        }.onFailure { logger.log(TAG, "cancel failed for $url", it) }
     }
 
     /**
@@ -164,13 +172,31 @@ class MinnalDownloadManager @Inject constructor(
     fun pause(url: String) {
         stateBus.markPauseRequested(url)
         runCatching {
-            repository.updateStatus(
+            val snapshot = stateBus.snapshot(url)
+            val entry = repository.findDownloadForUrl(url).blockingGet()
+            val bytesDownloaded = when {
+                snapshot != null && snapshot.bytesDownloaded > 0L -> snapshot.bytesDownloaded
+                entry != null -> storage.stagedBytesDownloaded(url, entry.title)
+                    .takeIf { it > 0L } ?: entry.bytesDownloaded
+                else -> 0L
+            }
+            val totalBytes = snapshot?.totalBytes ?: entry?.totalBytes ?: -1L
+            repository.updateProgress(
                 url = url,
+                bytesDownloaded = bytesDownloaded,
+                totalBytes = totalBytes,
                 status = DownloadStatus.PAUSED,
-                errorMessage = null,
             ).blockingAwait()
-            stateBus.snapshot(url)?.let {
-                stateBus.update(it.copy(status = DownloadStatus.PAUSED, errorMessage = null))
+            if (snapshot != null) {
+                stateBus.update(
+                    snapshot.copy(
+                        status = DownloadStatus.PAUSED,
+                        bytesDownloaded = bytesDownloaded,
+                        totalBytes = totalBytes,
+                        errorMessage = null,
+                        bytesPerSecond = 0L,
+                    ),
+                )
             }
             downloadRunner.cancelActive(url)
             WorkManager.getInstance(application).cancelUniqueWork(workName(url))
@@ -264,7 +290,7 @@ class MinnalDownloadManager @Inject constructor(
     /**
      * Build a JSON snapshot of every known download (DB rows + live bus state merged).
      */
-    fun getDownloadsJson(): String {
+    fun getDownloadsJson(): String = runCatching {
         val persisted = repository.getAllDownloads().blockingGet().orEmpty()
         val live = stateBus.all()
         val merged = LinkedHashMap<String, JSONObject>(persisted.size + live.size)
@@ -282,7 +308,10 @@ class MinnalDownloadManager @Inject constructor(
         }
         val arr = JSONArray()
         for (json in merged.values) arr.put(json)
-        return arr.toString()
+        arr.toString()
+    }.getOrElse {
+        logger.log(TAG, "getDownloadsJson failed", it)
+        "[]"
     }
 
     private fun DownloadEntry.toJson(): JSONObject = JSONObject().apply {

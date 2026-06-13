@@ -132,6 +132,8 @@
     <string name="download_status_failed">Failed</string>
     <string name="download_status_cancelled">Cancelled</string>
     <string name="download_status_completed">Completed</string>
+    <string name="download_parallel_accelerated_title">Accelerated downloads</string>
+    <string name="download_parallel_accelerated_summary">Split large files into multiple parts for faster downloads. Uses 4 connections up to 400 MB, 8 up to 2 GB, and 12 for larger files.</string>
     <!-- In-app downloads page -->
     <string name="downloads_filter_all">All</string>
     <string name="downloads_filter_active">Active</string>

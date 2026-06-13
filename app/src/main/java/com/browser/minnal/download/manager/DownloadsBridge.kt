@@ -39,44 +39,48 @@ class DownloadsBridge(
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    @Volatile
+    private var lastListJson: String? = null
+
     @JavascriptInterface
-    fun isAvailable(): Boolean = isOnDownloadsPage()
+    fun isAvailable(): Boolean = checkDownloadsPage() != PageCheck.OffPage
 
     /** JSON-serialized [DownloadState]s + persisted DB rows merged. Empty array on misuse. */
     @JavascriptInterface
-    fun list(): String {
-        if (!isOnDownloadsPage()) return "[]"
-        return runCatching { manager.getDownloadsJson() }.getOrDefault("[]")
+    fun list(): String = when (checkDownloadsPage()) {
+        PageCheck.OffPage -> "[]"
+        PageCheck.OnPage -> fetchAndCacheList()
+        PageCheck.Unknown -> lastListJson ?: fetchAndCacheList()
     }
 
     @JavascriptInterface
     fun pause(url: String?) {
-        if (!isOnDownloadsPage() || url.isNullOrBlank()) return
-        manager.pause(url)
+        if (checkDownloadsPage() != PageCheck.OnPage || url.isNullOrBlank()) return
+        runCatching { manager.pause(url) }
     }
 
     @JavascriptInterface
     fun resume(url: String?) {
-        if (!isOnDownloadsPage() || url.isNullOrBlank()) return
-        manager.resume(url)
+        if (checkDownloadsPage() != PageCheck.OnPage || url.isNullOrBlank()) return
+        runCatching { manager.resume(url) }
     }
 
     @JavascriptInterface
     fun cancel(url: String?) {
-        if (!isOnDownloadsPage() || url.isNullOrBlank()) return
-        manager.cancel(url)
+        if (checkDownloadsPage() != PageCheck.OnPage || url.isNullOrBlank()) return
+        runCatching { manager.cancel(url) }
     }
 
     @JavascriptInterface
     fun retry(url: String?) {
-        if (!isOnDownloadsPage() || url.isNullOrBlank()) return
-        manager.retry(url)
+        if (checkDownloadsPage() != PageCheck.OnPage || url.isNullOrBlank()) return
+        runCatching { manager.retry(url) }
     }
 
     @JavascriptInterface
     fun deleteEntry(url: String?, alsoDeleteFile: Boolean) {
-        if (!isOnDownloadsPage() || url.isNullOrBlank()) return
-        manager.deleteEntry(url, alsoDeleteFile)
+        if (checkDownloadsPage() != PageCheck.OnPage || url.isNullOrBlank()) return
+        runCatching { manager.deleteEntry(url, alsoDeleteFile) }
     }
 
     /**
@@ -86,34 +90,59 @@ class DownloadsBridge(
      */
     @JavascriptInterface
     fun openFile(localPath: String?, mimeType: String?): Boolean {
-        if (!isOnDownloadsPage()) return false
+        if (checkDownloadsPage() != PageCheck.OnPage) return false
         return manager.openCommittedFile(localPath, mimeType)
     }
 
     /** Called from the downloads page when a row transitions to COMPLETED. */
     @JavascriptInterface
     fun requestRatingPromptIfEligible(): Boolean {
-        if (!isOnDownloadsPage()) return false
+        if (checkDownloadsPage() != PageCheck.OnPage) return false
         mainHandler.post(onRequestRatingPrompt)
         return true
     }
+
+    private fun fetchAndCacheList(): String =
+        runCatching { manager.getDownloadsJson() }
+            .getOrElse { lastListJson ?: "[]" }
+            .also { json ->
+                if (json != "[]" || lastListJson == null) {
+                    lastListJson = json
+                }
+            }
 
     /**
      * URL gate: only methods initiated from our own downloads page should be honored. We
      * read the URL on the main thread to avoid the WebView's same-thread guarantees being
      * violated; bridge methods are invoked on a binder thread.
      */
-    private fun isOnDownloadsPage(): Boolean {
+    private fun checkDownloadsPage(): PageCheck {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            return pageCheckForUrl(readWebViewUrl())
+        }
         var url: String? = null
         val latch = java.util.concurrent.CountDownLatch(1)
         mainHandler.post {
-            url = webView.url
+            url = readWebViewUrl()
             latch.countDown()
         }
         return runCatching {
-            latch.await(50, java.util.concurrent.TimeUnit.MILLISECONDS)
-            url.isDownloadsUrl()
-        }.getOrDefault(false)
+            if (!latch.await(200, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                return PageCheck.Unknown
+            }
+            pageCheckForUrl(url)
+        }.getOrDefault(PageCheck.Unknown)
+    }
+
+    private fun readWebViewUrl(): String? = runCatching { webView.url }.getOrNull()
+
+    private fun pageCheckForUrl(url: String?): PageCheck =
+        if (url.isDownloadsUrl()) PageCheck.OnPage else PageCheck.OffPage
+
+    private enum class PageCheck {
+        OnPage,
+        OffPage,
+        Unknown,
     }
 
     companion object {

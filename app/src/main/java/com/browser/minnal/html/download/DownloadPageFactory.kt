@@ -360,10 +360,14 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
         try {
             var json = BRIDGE.list();
             var arr = JSON.parse(json || "[]");
-            state.items = Array.isArray(arr) ? arr : [];
-        } catch (e) {
-            state.items = [];
-        }
+            if (Array.isArray(arr)) {
+                // Ignore transient empty snapshots so the list does not flash blank while
+                // pause/resume or bridge URL checks are in flight.
+                if (arr.length > 0 || state.items.length === 0) {
+                    state.items = arr;
+                }
+            }
+        } catch (e) { /* keep last good snapshot */ }
         detectNewCompletions(state.items);
         render();
     }
@@ -495,9 +499,10 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
     }
 
     function listStructuralKeyFor(items) {
-        return items.map(function(i) {
-            return (i.url || "") + "\u0001" + (i.status || "");
-        }).join("\u0002") + "\u0003" + state.filter + "\u0004" + state.query;
+        // URL membership only — status/progress changes are patched in-place to avoid
+        // wiping innerHTML (which causes a visible list blink on pause/resume).
+        return items.map(function(i) { return i.url || ""; }).join("\u0002")
+            + "\u0003" + state.filter + "\u0004" + state.query;
     }
 
     function findCardByUrl(url) {
@@ -632,7 +637,6 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
         if (forceRebuild || key !== listStructuralKey) {
             listStructuralKey = key;
             els.list.innerHTML = items.map(renderCard).join("");
-            bindCardEvents();
             updateOpenMenus();
         } else {
             items.forEach(function(item) {
@@ -733,27 +737,29 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
             + rows.join("") + '</div>';
     }
 
-    // --- Card-level event delegation ---------------------------------------
-    function bindCardEvents() {
-        Array.prototype.forEach.call(els.list.querySelectorAll(".card"), function(card) {
-            var url = card.getAttribute("data-url");
-            card.addEventListener("click", function(ev) {
-                var btn = ev.target.closest("[data-action]");
-                if (!btn) return;
-                ev.stopPropagation();
-                handleAction(btn.getAttribute("data-action"), url, card);
-            });
-            card.addEventListener("contextmenu", function(ev) {
-                ev.preventDefault();
-                toggleSelection(url);
-            });
+    // --- List-level event delegation (survives patchCard innerHTML updates) ---
+    function setupListDelegation() {
+        els.list.addEventListener("click", function(ev) {
+            var card = ev.target.closest(".card");
+            if (!card || !els.list.contains(card)) return;
+            var btn = ev.target.closest("[data-action]");
+            if (!btn) return;
+            ev.stopPropagation();
+            handleAction(btn.getAttribute("data-action"), card.getAttribute("data-url"), card);
         });
-        document.addEventListener("click", function(ev) {
-            if (!ev.target.closest(".popup") && !ev.target.closest(".menu-btn")) {
-                if (state.openMenuUrl) { state.openMenuUrl = null; updateOpenMenus(); }
-            }
-        }, { once: true });
+        els.list.addEventListener("contextmenu", function(ev) {
+            var card = ev.target.closest(".card");
+            if (!card || !els.list.contains(card)) return;
+            ev.preventDefault();
+            toggleSelection(card.getAttribute("data-url"));
+        });
     }
+
+    document.addEventListener("click", function(ev) {
+        if (!ev.target.closest(".popup") && !ev.target.closest(".menu-btn")) {
+            if (state.openMenuUrl) { state.openMenuUrl = null; updateOpenMenus(); }
+        }
+    });
 
     function handleAction(action, url, card) {
         var item = state.items.find(function(i) { return i.url === url; });
@@ -858,6 +864,7 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
         renderChips();
         renderList();
     }
+    setupListDelegation();
     render();
     if (BRIDGE) {
         startPolling();

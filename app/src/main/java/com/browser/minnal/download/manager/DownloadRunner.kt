@@ -7,9 +7,11 @@ import com.browser.minnal.database.downloads.DownloadEntry
 import com.browser.minnal.database.downloads.DownloadStatus
 import com.browser.minnal.database.downloads.DownloadsRepository
 import com.browser.minnal.log.Logger
+import com.browser.minnal.preference.UserPreferences
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
@@ -17,6 +19,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -33,11 +36,13 @@ class DownloadRunner @Inject constructor(
     private val storage: DownloadStorage,
     private val notifier: DownloadNotifier,
     private val bus: DownloadStateBus,
+    private val userPreferences: UserPreferences,
     private val logger: Logger,
 ) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val activeJobs = ConcurrentHashMap<String, Job>()
+    private val progressPersistLocks = ConcurrentHashMap<String, Any>()
 
     fun isActive(url: String): Boolean = activeJobs[url]?.isActive == true
 
@@ -58,6 +63,7 @@ class DownloadRunner @Inject constructor(
                     run(url, attempt = 1)
                 } finally {
                     activeJobs.remove(url)
+                    progressPersistLocks.remove(url)
                 }
             }
             activeJobs[url] = job
@@ -125,6 +131,14 @@ class DownloadRunner @Inject constructor(
 
         val sampleWindow = ArrayDeque<Pair<Long, Long>>()
         sampleWindow.addLast(System.currentTimeMillis() to entry.bytesDownloaded)
+        val progressPersistLock = progressPersistLocks.getOrPut(entry.url) { Any() }
+        val lastProgressDbPersistMs = AtomicLong(0L)
+
+        val parallelConnections = if (userPreferences.downloadParallelAccelerated) {
+            DownloadEngine.PARALLEL_AUTO
+        } else {
+            DownloadEngine.SINGLE_CONNECTION
+        }
 
         val transferResult = try {
             engine.download(
@@ -133,21 +147,43 @@ class DownloadRunner @Inject constructor(
                 userAgent = entry.userAgent,
                 existingETag = entry.eTag,
                 existingLastModified = entry.lastModified,
+                parallelConnections = parallelConnections,
                 onProgress = { written, total ->
-                    val nowMs = System.currentTimeMillis()
-                    sampleWindow.addLast(nowMs to written)
-                    while (sampleWindow.size > 1 && nowMs - sampleWindow.first().first > 3_000L) {
-                        sampleWindow.removeFirst()
-                    }
-                    val oldest = sampleWindow.first()
-                    val elapsedMs = (nowMs - oldest.first).coerceAtLeast(1L)
-                    val deltaBytes = (written - oldest.second).coerceAtLeast(0L)
-                    val bytesPerSecond = (deltaBytes * 1000L) / elapsedMs
+                    runCatching {
+                        // Parallel parts report progress from multiple threads; guard the speed
+                        // sample window and downstream UI/DB updates.
+                        val bytesPerSecond = synchronized(sampleWindow) {
+                            val nowMs = System.currentTimeMillis()
+                            sampleWindow.addLast(nowMs to written)
+                            while (sampleWindow.size > 1) {
+                                val head = sampleWindow.firstOrNull() ?: break
+                                if (nowMs - head.first <= 3_000L) break
+                                sampleWindow.removeFirst()
+                            }
+                            val oldest = sampleWindow.firstOrNull() ?: return@synchronized 0L
+                            val elapsedMs = (nowMs - oldest.first).coerceAtLeast(1L)
+                            val deltaBytes = (written - oldest.second).coerceAtLeast(0L)
+                            (deltaBytes * 1000L) / elapsedMs
+                        }
 
-                    emit(entry, DownloadStatus.RUNNING, written, total, speed = bytesPerSecond)
-                    notifier.updateProgress(entry.url, entry.title, written, total)
-                    repository.updateProgress(entry.url, written, total, DownloadStatus.RUNNING)
-                        .subscribe({}, { logger.log(TAG, "progress persist failed", it) })
+                        emit(entry, DownloadStatus.RUNNING, written, total, speed = bytesPerSecond)
+                        notifier.updateProgress(entry.url, entry.title, written, total)
+
+                        val nowMs = System.currentTimeMillis()
+                        if (nowMs - lastProgressDbPersistMs.get() >= PROGRESS_DB_INTERVAL_MS) {
+                            synchronized(progressPersistLock) {
+                                if (nowMs - lastProgressDbPersistMs.get() >= PROGRESS_DB_INTERVAL_MS) {
+                                    lastProgressDbPersistMs.set(nowMs)
+                                    repository.updateProgress(
+                                        entry.url,
+                                        written,
+                                        total,
+                                        DownloadStatus.RUNNING,
+                                    ).blockingAwait()
+                                }
+                            }
+                        }
+                    }.onFailure { logger.log(TAG, "Progress update failed for ${entry.url}", it) }
                 },
             )
         } catch (ce: CancellationException) {
@@ -228,13 +264,31 @@ class DownloadRunner @Inject constructor(
         if (attempt >= MAX_ATTEMPTS) {
             return failTerminal(entry, cause)
         }
-        emit(entry, DownloadStatus.RETRYING, entry.bytesDownloaded, entry.totalBytes, cause.message)
+        val latest = repository.findDownloadForUrl(entry.url).blockingGet() ?: return RunOutcome.Cancelled
+        if (!isTransferableStatus(latest)) {
+            return RunOutcome.Cancelled
+        }
+        emit(latest, DownloadStatus.RETRYING, latest.bytesDownloaded, latest.totalBytes, cause.message)
         repository.updateStatus(
-            url = entry.url,
+            url = latest.url,
             status = DownloadStatus.RETRYING,
             errorMessage = cause.message,
         ).blockingAwait()
-        return RunOutcome.Retry
+        notifier.updateProgress(latest.url, latest.title, latest.bytesDownloaded, latest.totalBytes)
+
+        val backoffMs = (1_000L shl (attempt - 1).coerceAtMost(4)).coerceAtMost(30_000L)
+        try {
+            delay(backoffMs)
+        } catch (ce: CancellationException) {
+            onCancelled(latest, storage.stagingFile(latest.url, latest.title))
+            return RunOutcome.Cancelled
+        }
+
+        val afterWait = repository.findDownloadForUrl(entry.url).blockingGet() ?: return RunOutcome.Cancelled
+        if (!isTransferableStatus(afterWait)) {
+            return RunOutcome.Cancelled
+        }
+        return run(entry.url, attempt + 1)
     }
 
     private suspend fun failTerminal(entry: DownloadEntry, cause: Throwable): RunOutcome {
@@ -274,22 +328,30 @@ class DownloadRunner @Inject constructor(
             return
         }
 
+        if (status == DownloadStatus.CANCELLED) {
+            runCatching { storage.deleteStaging(entry.url) }
+            runCatching { notifier.cancel(entry.url) }
+            return
+        }
+
         when (status) {
             DownloadStatus.PENDING,
             DownloadStatus.RUNNING,
             DownloadStatus.RETRYING -> return
-
-            DownloadStatus.CANCELLED -> {
-                runCatching { storage.deleteStaging(entry.url) }
-                runCatching { notifier.cancel(entry.url) }
-            }
-
             else -> runCatching { notifier.cancel(entry.url) }
         }
     }
 
     private fun persistPausedState(latest: DownloadEntry, staging: File) {
-        val bytes = runCatching { staging.length() }.getOrDefault(0L).coerceAtLeast(0L)
+        val bytes = runCatching {
+            storage.stagedBytesDownloaded(latest.url, latest.title)
+        }.getOrDefault(0L).let { staged ->
+            when {
+                staged > 0L -> staged
+                staging.exists() -> staging.length().coerceAtLeast(0L)
+                else -> latest.bytesDownloaded.coerceAtLeast(0L)
+            }
+        }
         runCatching {
             repository.updateProgress(
                 url = latest.url,
@@ -345,5 +407,6 @@ class DownloadRunner @Inject constructor(
     companion object {
         private const val TAG = "DownloadRunner"
         private const val MAX_ATTEMPTS = 5
+        private const val PROGRESS_DB_INTERVAL_MS = 2_000L
     }
 }

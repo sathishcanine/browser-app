@@ -44,16 +44,51 @@ class DownloadStorage @Inject constructor(
      * itself is hashed into the directory name so they never collide on the staging area.
      */
     fun stagingFile(url: String, fileName: String): File {
-        val parent = File(application.cacheDir, "$STAGING_DIR/${stableKey(url)}")
+        val parent = stagingDir(url)
         if (!parent.exists()) parent.mkdirs()
-        return File(parent, fileName)
+        return File(parent, safeFileName(fileName))
+    }
+
+    /** Number of `part-N` files on disk from a prior parallel transfer (0 if none). */
+    fun existingParallelPartCount(url: String): Int {
+        val parent = stagingDir(url)
+        if (!parent.exists()) return 0
+        return parent.listFiles()
+            ?.count { file ->
+                file.isFile && file.name.startsWith(PART_FILE_PREFIX) &&
+                    file.name.length > PART_FILE_PREFIX.length
+            }
+            ?: 0
+    }
+
+    /**
+     * Total bytes already on disk for an in-progress transfer. Parallel downloads store partial
+     * data in `part-N` files; single-connection downloads write directly to [stagingFile].
+     */
+    fun stagedBytesDownloaded(url: String, fileName: String): Long {
+        val parent = stagingDir(url)
+        if (!parent.exists()) return 0L
+        val partFiles = parent.listFiles()
+            ?.filter { it.isFile && it.name.startsWith(PART_FILE_PREFIX) }
+            .orEmpty()
+        if (partFiles.isNotEmpty()) {
+            return partFiles.sumOf { it.length().coerceAtLeast(0L) }
+        }
+        return File(parent, safeFileName(fileName)).takeIf { it.exists() }?.length()?.coerceAtLeast(0L) ?: 0L
+    }
+
+    private fun safeFileName(fileName: String): String {
+        val base = File(fileName).name.trim()
+        return base.takeIf { it.isNotEmpty() && it != "." && it != ".." } ?: "download"
     }
 
     /** Removes any partial bytes for [url]. Called after Cancel or on permanent failure. */
     fun deleteStaging(url: String) {
-        val parent = File(application.cacheDir, "$STAGING_DIR/${stableKey(url)}")
-        parent.deleteRecursively()
+        stagingDir(url).deleteRecursively()
     }
+
+    private fun stagingDir(url: String): File =
+        File(application.cacheDir, "$STAGING_DIR/${stableKey(url)}")
 
     /**
      * Best-effort removal of a previously committed file. Accepts either an absolute file path
@@ -196,5 +231,6 @@ class DownloadStorage @Inject constructor(
 
     companion object {
         private const val STAGING_DIR = "inbuilt-downloads"
+        private const val PART_FILE_PREFIX = "part-"
     }
 }

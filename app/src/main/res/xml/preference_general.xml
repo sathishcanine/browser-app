@@ -32,6 +32,11 @@
             android:key="download"
             android:title="@string/download"/>
         <SwitchPreference
+            android:defaultValue="true"
+            android:key="cb_download_parallel_accelerated"
+            android:summary="@string/download_parallel_accelerated_summary"
+            android:title="@string/download_parallel_accelerated_title"/>
+        <SwitchPreference
             android:defaultValue="false"
             android:key="cb_prefer_external_app_for_downloads"
             android:summary="@string/prefer_external_app_for_downloads_summary"
