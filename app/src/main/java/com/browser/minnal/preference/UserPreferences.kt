@@ -421,6 +421,11 @@ class UserPreferences @Inject constructor(
         LEGACY_TAMILSHOWZ_NET_BOOKMARK_TITLE_MIGRATED,
         false
     )
+
+    /**
+     * Receive Minnal announcements (app updates, app promos) via Firebase push.
+     */
+    var promotionalPushEnabled by preferences.booleanPreference(PROMOTIONAL_PUSH_ENABLED, true)
 }
 
 private const val WEB_RTC = "webRtc"
@@ -491,3 +496,4 @@ private const val LEGACY_GOOGLE_DUCKDUCKGO_TO_CRICKET_SITES_MIGRATED =
 private const val LEGACY_TWITTER_TO_TAMILSHOWZ_MIGRATED = "legacyTwitterToTamilshowzMigrated"
 private const val LEGACY_TAMILSHOWZ_NET_BOOKMARK_TITLE_MIGRATED =
     "legacyTamilshowzNetBookmarkTitleMigrated"
+private const val PROMOTIONAL_PUSH_ENABLED = "promotionalPushEnabled"

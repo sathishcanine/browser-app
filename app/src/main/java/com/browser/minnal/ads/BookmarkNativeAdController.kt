@@ -45,6 +45,8 @@ class BookmarkNativeAdController private constructor(
     private var dismissedForThisVisit = false
     private var presenterWantsVisible = false
     private var loadAttemptedForThisVisit = false
+    private var downloadsBackSessionActive = false
+    private var adUnitIdOverride: String? = null
 
     private val reservedAdContainerHeight: Int =
         if (reserveLayoutSpace) {
@@ -62,6 +64,7 @@ class BookmarkNativeAdController private constructor(
             closeButton.setOnClickListener {
                 onUserDismissedStrip?.invoke()
                 dismissedForThisVisit = true
+                clearDownloadsBackMode()
                 stripRoot.isVisible = false
                 adContainer.isVisible = false
                 destroyLoadedAd()
@@ -70,7 +73,33 @@ class BookmarkNativeAdController private constructor(
         updateExpandedUi()
     }
 
+    /**
+     * One-shot native ad after backing out of the downloads page. Uses [expandToggle] / [closeButton]
+     * and bypasses the home-screen scheduler until dismissed.
+     */
+    fun showAfterDownloadsBackNavigation() {
+        downloadsBackSessionActive = true
+        adUnitIdOverride = BuildConfig.DOWNLOADS_BACK_NATIVE_AD_UNIT_ID
+        dismissedForThisVisit = false
+        loadAttemptedForThisVisit = false
+        presenterWantsVisible = true
+        expanded = true
+        destroyLoadedAd()
+        stripRoot.isVisible = true
+        updateExpandedUi()
+    }
+
     fun onPresenterShowBookmarkNativeAd(show: Boolean) {
+        if (downloadsBackSessionActive) {
+            if (dismissedForThisVisit) {
+                clearDownloadsBackMode()
+            } else {
+                presenterWantsVisible = true
+                stripRoot.isVisible = true
+                updateExpandedUi()
+                return
+            }
+        }
         presenterWantsVisible = show
         if (!show) {
             dismissedForThisVisit = false
@@ -145,7 +174,7 @@ class BookmarkNativeAdController private constructor(
         ensureNativeAdViewInflated()
         val adView = nativeAdViewBinding?.root as? NativeAdView ?: return
 
-        AdLoader.Builder(activity, adUnitId())
+        AdLoader.Builder(activity, adUnitIdOverride ?: adUnitId())
             .forNativeAd { ad ->
                 loadedNativeAd?.destroy()
                 loadedNativeAd = ad
@@ -233,6 +262,11 @@ class BookmarkNativeAdController private constructor(
         adView.setNativeAd(ad)
     }
 
+    private fun clearDownloadsBackMode() {
+        downloadsBackSessionActive = false
+        adUnitIdOverride = null
+    }
+
     private fun destroyLoadedAd() {
         loadedNativeAd?.destroy()
         loadedNativeAd = null
@@ -244,6 +278,8 @@ class BookmarkNativeAdController private constructor(
     fun destroy() {
         destroyLoadedAd()
     }
+
+    fun isDownloadsBackSessionActive(): Boolean = downloadsBackSessionActive
 
     companion object {
         private const val AD_FADE_IN_MS = 200L

@@ -83,12 +83,20 @@ class BrowserStateAdapter(private val browserActivity: BrowserActivity) : Browse
         tabs.takeIf { it != currentTabs }?.let(browserActivity::renderTabs)
     }
 
-    override fun playBackgroundTabAddedAnimation() {
-        browserActivity.playBackgroundTabAddedAnimation()
+    override fun playBackgroundTabAddedAnimation(popupIntercepted: Boolean) {
+        browserActivity.playBackgroundTabAddedAnimation(popupIntercepted)
+    }
+
+    override fun showPopupBlockedMessage() {
+        browserActivity.showPopupBlockedMessage()
     }
 
     override fun showRatingPromptIfEligible() {
         browserActivity.showRatingPromptIfEligible()
+    }
+
+    override fun showNativeAdAfterDownloadsBack() {
+        browserActivity.showNativeAdAfterDownloadsBack()
     }
 
     override fun showAddBookmarkDialog(title: String, url: String, folders: List<String>) {

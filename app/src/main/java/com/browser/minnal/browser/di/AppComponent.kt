@@ -15,6 +15,8 @@ import com.browser.minnal.download.manager.DownloadRunner
 import com.browser.minnal.download.manager.DownloadStateBus
 import com.browser.minnal.download.manager.DownloadStorage
 import com.browser.minnal.download.manager.MinnalDownloadManager
+import com.browser.minnal.firebase.PushNotificationHelper
+import com.browser.minnal.firebase.PushNotificationRegistrar
 import com.browser.minnal.log.Logger
 import com.browser.minnal.search.SuggestionsAdapter
 import com.browser.minnal.settings.activity.ThemableSettingsActivity
@@ -102,6 +104,10 @@ interface AppComponent {
     fun downloadsRepository(): DownloadsRepository
 
     fun logger(): Logger
+
+    fun pushNotificationHelper(): PushNotificationHelper
+
+    fun pushNotificationRegistrar(): PushNotificationRegistrar
 
 }
 

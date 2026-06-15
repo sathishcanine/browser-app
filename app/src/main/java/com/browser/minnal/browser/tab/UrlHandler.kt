@@ -215,6 +215,7 @@ class UrlHandler @Inject constructor(
         }
         if (!popupTabGate.shouldAllowPopupTab(url)) {
             logger.log(TAG, "Suppressed extra popup tab, loading in current tab: $url")
+            popupTabGate.notifyPopupBlocked()
             return continueLoadingUrl(view, url, headers)
         }
         if (requestNewTab != null) {

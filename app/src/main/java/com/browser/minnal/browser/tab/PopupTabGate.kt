@@ -1,5 +1,7 @@
 package com.browser.minnal.browser.tab
 
+import io.reactivex.rxjava3.core.Observable
+import io.reactivex.rxjava3.subjects.PublishSubject
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -13,6 +15,11 @@ class PopupTabGate @Inject constructor() {
     private var openedSinceGesture = 0
     private val recentUrls = LinkedHashSet<String>()
     private var lastUserGestureAtMs = 0L
+    private var lastBlockedMessageAtMs = 0L
+    private val blockedSubject = PublishSubject.create<Unit>()
+
+    /** Emits when a popup / ad tab was intercepted or blocked (debounced). */
+    fun blockedEvents(): Observable<Unit> = blockedSubject.hide()
 
     @Synchronized
     fun onUserGesture() {
@@ -63,6 +70,22 @@ class PopupTabGate @Inject constructor() {
         openedSinceGesture++
     }
 
+    /** Request the browser UI to show the popup-blocked message (debounced). */
+    fun notifyPopupBlocked() {
+        val shouldEmit = synchronized(this) {
+            val now = System.currentTimeMillis()
+            if (now - lastBlockedMessageAtMs < BLOCKED_MESSAGE_DEBOUNCE_MS) {
+                false
+            } else {
+                lastBlockedMessageAtMs = now
+                true
+            }
+        }
+        if (shouldEmit) {
+            blockedSubject.onNext(Unit)
+        }
+    }
+
     private fun normalizeUrlKey(url: String): String =
         url.lowercase().substringBefore('#').trimEnd('/')
 
@@ -70,5 +93,6 @@ class PopupTabGate @Inject constructor() {
         private const val MAX_POPUP_TABS_PER_GESTURE = 1
         private const val MAX_TRACKED_URLS = 8
         private const val USER_GESTURE_WINDOW_MS = 3_000L
+        private const val BLOCKED_MESSAGE_DEBOUNCE_MS = 2_000L
     }
 }

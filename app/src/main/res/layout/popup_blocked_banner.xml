@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/message"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_popup_blocked_banner"
+    android:elevation="6dp"
+    android:gravity="center"
+    android:maxWidth="@dimen/popup_blocked_banner_max_width"
+    android:paddingStart="14dp"
+    android:paddingTop="7dp"
+    android:paddingEnd="14dp"
+    android:paddingBottom="7dp"
+    android:textColor="@color/white"
+    android:textSize="12sp" />

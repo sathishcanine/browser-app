@@ -26,7 +26,7 @@ android {
     defaultConfig {
         minSdk = 26
         targetSdk = 36
-        versionName = "1.0.10"
+        versionName = "1.0.11"
         vectorDrawables.useSupportLibrary = true
         // AdMob app id (tilde form). Override in `release` with the id from AdMob → Apps → App settings.
         manifestPlaceholders["admobAppId"] = "ca-app-pub-3940256099942544~3347511713"
@@ -86,6 +86,11 @@ android {
             )
             buildConfigField(
                 "String",
+                "DOWNLOADS_BACK_NATIVE_AD_UNIT_ID",
+                "\"ca-app-pub-3940256099942544/2247696110\""
+            )
+            buildConfigField(
+                "String",
                 "REWARDED_AD_ONE",
                 "\"ca-app-pub-3940256099942544/5224354917\""
             )
@@ -134,6 +139,11 @@ android {
             )
             buildConfigField(
                 "String",
+                "DOWNLOADS_BACK_NATIVE_AD_UNIT_ID",
+                "\"ca-app-pub-8723888126390754/2050456565\""
+            )
+            buildConfigField(
+                "String",
                 "REWARDED_AD_ONE",
                 "\"ca-app-pub-8723888126390754/1021424890\""
             )
@@ -169,7 +179,7 @@ android {
             dimension = "capabilities"
             buildConfigField("boolean", "FULL_VERSION", "Boolean.parseBoolean(\"true\")")
             applicationId = "com.browser.minnal"
-            versionCode = 21
+            versionCode = 22
         }
 
         if (!isCi) {
@@ -177,7 +187,7 @@ android {
                 dimension = "capabilities"
                 buildConfigField("boolean", "FULL_VERSION", "Boolean.parseBoolean(\"true\")")
                 applicationId = "com.browser.minnal"
-                versionCode = 21
+                versionCode = 22
             }
         }
     }
@@ -252,6 +262,7 @@ dependencies {
     implementation("com.google.firebase:firebase-analytics-ktx")
     implementation("com.google.firebase:firebase-config-ktx")
     implementation("com.google.firebase:firebase-crashlytics-ktx")
+    implementation("com.google.firebase:firebase-messaging-ktx")
     implementation("com.google.android.play:app-update:2.1.0")
 
     debugImplementation("com.squareup.leakcanary:leakcanary-android:2.14")

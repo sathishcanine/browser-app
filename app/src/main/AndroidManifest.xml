@@ -68,6 +68,9 @@
             android:name="firebase_crashlytics_collection_enabled"
             android:value="true" />
         <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="@string/push_notification_channel_id" />
+        <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="${admobAppId}" />
         <!-- Required so rewarded/interstitial AdActivity runs in :incognito, not only the main process. -->
@@ -232,6 +235,18 @@
         <receiver
             android:name="com.browser.minnal.download.manager.DownloadActionReceiver"
             android:exported="false" />
+
+        <receiver
+            android:name="com.browser.minnal.firebase.PushNotificationClickReceiver"
+            android:exported="false" />
+
+        <service
+            android:name="com.browser.minnal.firebase.MinnalFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
 
         <!-- WorkManager hosts our long-running download via SystemForegroundService. Android 14+
              (API 34) requires every foreground service to declare its type, so we override the

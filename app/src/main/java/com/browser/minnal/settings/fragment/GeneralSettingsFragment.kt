@@ -7,6 +7,7 @@ import com.browser.minnal.constant.SCHEME_BOOKMARKS
 import com.browser.minnal.constant.SCHEME_HOMEPAGE
 import com.browser.minnal.dialog.BrowserDialog
 import com.browser.minnal.preference.UserPreferences
+import com.browser.minnal.firebase.PushNotificationRegistrar
 import com.browser.minnal.search.SearchEngineProvider
 import com.browser.minnal.search.Suggestions
 import com.browser.minnal.search.engine.BaseSearchEngine
@@ -32,6 +33,7 @@ class GeneralSettingsFragment : AbstractSettingsFragment() {
 
     @Inject lateinit var searchEngineProvider: SearchEngineProvider
     @Inject lateinit var userPreferences: UserPreferences
+    @Inject lateinit var pushNotificationRegistrar: PushNotificationRegistrar
 
     override fun providePreferencesXmlResource() = R.xml.preference_general
 
@@ -67,6 +69,15 @@ class GeneralSettingsFragment : AbstractSettingsFragment() {
             preference = SETTINGS_DISCOVER_FEED,
             isChecked = userPreferences.discoverFeedEnabled,
             onCheckChange = { userPreferences.discoverFeedEnabled = it }
+        )
+
+        togglePreference(
+            preference = SETTINGS_PROMOTIONAL_PUSH,
+            isChecked = userPreferences.promotionalPushEnabled,
+            onCheckChange = {
+                userPreferences.promotionalPushEnabled = it
+                pushNotificationRegistrar.syncTopicSubscription()
+            }
         )
 
         clickableDynamicPreference(
@@ -430,6 +441,7 @@ class GeneralSettingsFragment : AbstractSettingsFragment() {
         private const val SETTINGS_PREFER_EXTERNAL_APP_FOR_DOWNLOADS =
             "cb_prefer_external_app_for_downloads"
         private const val SETTINGS_DISCOVER_FEED = "cb_discover_feed_enabled"
+        private const val SETTINGS_PROMOTIONAL_PUSH = "cb_promotional_push_enabled"
         private const val SETTINGS_HOME = "home"
         private const val SETTINGS_SEARCH_ENGINE = "search"
         private const val SETTINGS_SUGGESTIONS = "suggestions_choice"

@@ -21,6 +21,7 @@ import android.webkit.CookieManager
 import android.webkit.WebView
 import com.browser.minnal.ads.AppOpenAdManager
 import com.browser.minnal.ads.MobileAdsInitializer
+import com.browser.minnal.firebase.PushNotificationRegistrar
 import com.browser.minnal.utils.isIncognitoProcess
 import com.google.firebase.FirebaseApp
 import com.google.firebase.analytics.FirebaseAnalytics
@@ -68,6 +69,9 @@ class BrowserApp : Application(), Configuration.Provider {
 
     @Inject
     internal lateinit var mobileAdsInitializer: MobileAdsInitializer
+
+    @Inject
+    internal lateinit var pushNotificationRegistrar: PushNotificationRegistrar
 
     lateinit var applicationComponent: AppComponent
 
@@ -162,6 +166,7 @@ class BrowserApp : Application(), Configuration.Provider {
         if (!incognitoProcess) {
             mobileAdsInitializer.start()
             appOpenAdManager.start()
+            pushNotificationRegistrar.syncTopicSubscription()
         }
         minnalDownloadManager.resumeActiveDownloads()
 

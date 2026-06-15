@@ -46,6 +46,11 @@
             android:key="cb_discover_feed_enabled"
             android:summary="@string/discover_feed_summary"
             android:title="@string/discover_feed_title"/>
+        <SwitchPreference
+            android:defaultValue="true"
+            android:key="cb_promotional_push_enabled"
+            android:summary="@string/promotional_push_summary"
+            android:title="@string/promotional_push_title"/>
         <Preference
             android:key="home"
             android:title="@string/home"/>

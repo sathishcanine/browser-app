@@ -1,6 +1,7 @@
 package com.browser.minnal.browser
 
 import com.browser.minnal.AppTheme
+import com.browser.minnal.BrowserApp
 import com.browser.minnal.DefaultBrowserActivity
 import com.browser.minnal.R
 import com.browser.minnal.onboarding.OnboardingActivity
@@ -33,6 +34,7 @@ import com.browser.minnal.browser.ui.TabConfiguration
 import com.browser.minnal.browser.ui.UiConfiguration
 import com.browser.minnal.browser.menu.MenuSelection
 import com.browser.minnal.browser.view.BackgroundTabFlyInAnimation
+import com.browser.minnal.browser.view.PopupBlockedMessage
 import com.browser.minnal.rating.RatingPromptDialog
 import com.browser.minnal.rating.RatingPromptHelper
 import com.browser.minnal.browser.view.ViewDelegate
@@ -318,6 +320,10 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
             .incognitoMode(isIncognito())
             .build()
             .inject(this)
+
+        if (!isIncognito()) {
+            handlePushNotificationIntent(intent)
+        }
 
         if (isIncognito()) {
             bootstrapIncognitoAds()
@@ -903,8 +909,17 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
     }
 
     override fun onNewIntent(intent: Intent) {
+        if (!isIncognito()) {
+            handlePushNotificationIntent(intent)
+        }
         intentExtractor.extractUrlFromIntent(intent)?.let(presenter::onNewAction)
         super.onNewIntent(intent)
+    }
+
+    private fun handlePushNotificationIntent(intent: Intent?) {
+        (application as BrowserApp).applicationComponent
+            .pushNotificationHelper()
+            .handleNotificationOpen(intent)
     }
 
     override fun onWindowVisibleToUserAfterResume() {
@@ -1090,7 +1105,10 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
     /**
      * @see BrowserContract.View.playBackgroundTabAddedAnimation
      */
-    fun playBackgroundTabAddedAnimation() {
+    fun playBackgroundTabAddedAnimation(popupIntercepted: Boolean) {
+        if (popupIntercepted) {
+            showPopupBlockedMessage()
+        }
         if (!binding.tabCountView.isVisible) {
             return
         }
@@ -1101,6 +1119,26 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
             chipColor = defaultColor,
             chipStrokeColor = themeProvider.color(R.attr.iconColor),
         )
+    }
+
+    /**
+     * @see BrowserContract.View.showPopupBlockedMessage
+     */
+    fun showPopupBlockedMessage() {
+        if (isFinishing || isDestroyed) {
+            return
+        }
+        PopupBlockedMessage.show(this, binding.contentFrame, R.string.message_popup_ad_blocked)
+    }
+
+    /**
+     * @see BrowserContract.View.showNativeAdAfterDownloadsBack
+     */
+    fun showNativeAdAfterDownloadsBack() {
+        if (isFinishing || isDestroyed || isIncognito()) {
+            return
+        }
+        bookmarkNativeAdController?.showAfterDownloadsBackNavigation()
     }
 
     /**
@@ -1609,6 +1647,9 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
     }
 
     private fun applyBookmarkNativeAdStripVisibility(schedulerEligible: Boolean) {
+        if (bookmarkNativeAdController?.isDownloadsBackSessionActive() == true) {
+            return
+        }
         bookmarkNativeAdController?.onPresenterShowBookmarkNativeAd(
             wantsBookmarkNativeAdStrip && schedulerEligible,
         )

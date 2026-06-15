@@ -126,6 +126,7 @@ class TabWebChromeClient @Inject constructor(
     ): Boolean {
         // Second+ window.open from one tap (e.g. content after an ad) loads in the current tab.
         if (isUserGesture && !popupTabGate.shouldAllowPopupWindow()) {
+            popupTabGate.notifyPopupBlocked()
             assignWindowToWebView(view, resultMsg)
             return true
         }

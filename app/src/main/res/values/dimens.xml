@@ -28,6 +28,7 @@
     <dimen name="toolbar_tab_count_icon">20dp</dimen>
 
     <dimen name="progress_bar_height">2dp</dimen>
+    <dimen name="popup_blocked_banner_max_width">260dp</dimen>
 
     <dimen name="radial_fab_size">56dp</dimen>
     <dimen name="radial_fab_item_size">48dp</dimen>

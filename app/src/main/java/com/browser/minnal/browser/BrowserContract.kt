@@ -38,13 +38,26 @@ interface BrowserContract {
 
         /**
          * Play a short fly-in toward the tab switcher when a tab is opened in the background.
+         *
+         * @param popupIntercepted When true, also show the popup-blocked snackbar (ad sent to a
+         * background tab).
          */
-        fun playBackgroundTabAddedAnimation()
+        fun playBackgroundTabAddedAnimation(popupIntercepted: Boolean)
+
+        /**
+         * Brief green snackbar when a popup / ad tab was intercepted or blocked.
+         */
+        fun showPopupBlockedMessage()
 
         /**
          * Show the Play Store rating prompt when eligible (downloads page after a completion).
          */
         fun showRatingPromptIfEligible()
+
+        /**
+         * Native ad strip (closable / minimizable) after the user leaves the in-app downloads page.
+         */
+        fun showNativeAdAfterDownloadsBack()
 
         /**
          * Show the dialog to add a bookmark for the current page.

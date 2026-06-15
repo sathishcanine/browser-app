@@ -119,6 +119,9 @@ class BrowserPresenter @Inject constructor(
 
     private val downloadStatusByUrl = ConcurrentHashMap<String, DownloadStatus>()
 
+    /** URLs we already auto-navigated (or skipped because the user was already on Downloads). */
+    private val downloadAutoNavigatedUrls = ConcurrentHashMap.newKeySet<String>()
+
     private var isBrowserInForeground = false
 
     private var view: BrowserContract.View? = null
@@ -196,27 +199,29 @@ class BrowserPresenter @Inject constructor(
                 selectTab(model.selectTab(tabToSelect))
             }
 
-        // When the user accepts a download, pop them straight into the Downloads tab so they can
-        // see live progress without hunting through the menu. We skip the auto-open if they're
-        // already on a downloads page to avoid stacking duplicate tabs when several downloads
-        // are kicked off in quick succession.
-        compositeDisposable += minnalDownloadManager.changes()
-            .filter { it.status == DownloadStatus.RUNNING }
-            .filter { !rewardedDownloadAdHelper.isDownloadRewardFlowActive }
-            .observeOn(mainScheduler)
-            .subscribeBy { _ ->
-                if (currentTab?.url?.isDownloadsUrl() != true) {
-                    tabIdToRestoreAfterDownloads = currentTab?.id
-                    createNewTabAndSelect(downloadPageInitializer, shouldSelect = true)
-                }
-            }
-
-        // Native path: works even if an older cached downloads.html lacks the rating bridge.
+        // When the user accepts a download, pop them straight into the Downloads tab once so they
+        // can see live progress. Progress updates also emit RUNNING — only react on the first
+        // transition into RUNNING per URL so leaving the page mid-download stays put.
         compositeDisposable += minnalDownloadManager.changes()
             .observeOn(mainScheduler)
             .subscribeBy(
                 onNext = { state ->
                     val previous = downloadStatusByUrl.put(state.url, state.status)
+                    when (state.status) {
+                        DownloadStatus.COMPLETED,
+                        DownloadStatus.FAILED,
+                        DownloadStatus.CANCELLED -> downloadAutoNavigatedUrls.remove(state.url)
+                        else -> Unit
+                    }
+                    if (state.status == DownloadStatus.RUNNING &&
+                        previous != DownloadStatus.RUNNING &&
+                        !rewardedDownloadAdHelper.isDownloadRewardFlowActive &&
+                        downloadAutoNavigatedUrls.add(state.url) &&
+                        currentTab?.url?.isDownloadsUrl() != true
+                    ) {
+                        tabIdToRestoreAfterDownloads = currentTab?.id
+                        createNewTabAndSelect(downloadPageInitializer, shouldSelect = true)
+                    }
                     if (state.status == DownloadStatus.COMPLETED &&
                         previous != null &&
                         previous != DownloadStatus.COMPLETED &&
@@ -227,6 +232,10 @@ class BrowserPresenter @Inject constructor(
                 },
                 onError = { /* RxJavaPlugins handles; must not crash the browser */ },
             )
+
+        compositeDisposable += popupTabGate.blockedEvents()
+            .observeOn(mainScheduler)
+            .subscribeBy { view?.showPopupBlockedMessage() }
 
     }
 
@@ -392,6 +401,7 @@ class BrowserPresenter @Inject constructor(
             .subscribeOn(mainScheduler)
             .subscribeBy { initializer ->
                 if (!popupTabGate.shouldAllowPopupWindow()) {
+                    popupTabGate.notifyPopupBlocked()
                     return@subscribeBy
                 }
                 popupTabGate.recordPopupWindowOpened()
@@ -402,7 +412,7 @@ class BrowserPresenter @Inject constructor(
                     tabInitializer = initializer,
                     tabType = TabModel.Type.POP_UP,
                 ).observeOn(mainScheduler).subscribe { popupTab ->
-                    onBackgroundTabOpened()
+                    onBackgroundTabOpened(popupIntercepted = true)
                     if (promoteToOpener) {
                         compositeDisposable += popupTab.promoteToOpenerRequests()
                             .take(1)
@@ -424,6 +434,7 @@ class BrowserPresenter @Inject constructor(
                     tabInitializer = UrlInitializer(url),
                     shouldSelect = false,
                     tabType = TabModel.Type.POP_UP,
+                    popupIntercepted = true,
                 )
             }
 
@@ -584,7 +595,8 @@ class BrowserPresenter @Inject constructor(
     private fun createNewTabAndSelect(
         tabInitializer: TabInitializer,
         shouldSelect: Boolean,
-        tabType: TabModel.Type = TabModel.Type.NORMAL
+        tabType: TabModel.Type = TabModel.Type.NORMAL,
+        popupIntercepted: Boolean = false,
     ) {
         compositeDisposable += model.createTab(tabInitializer, tabType = tabType)
             .observeOn(mainScheduler)
@@ -592,13 +604,13 @@ class BrowserPresenter @Inject constructor(
                 if (shouldSelect) {
                     selectTab(model.selectTab(tab.id))
                 } else {
-                    onBackgroundTabOpened()
+                    onBackgroundTabOpened(popupIntercepted)
                 }
             }
     }
 
-    private fun onBackgroundTabOpened() {
-        view?.playBackgroundTabAddedAnimation()
+    private fun onBackgroundTabOpened(popupIntercepted: Boolean = false) {
+        view?.playBackgroundTabAddedAnimation(popupIntercepted)
     }
 
     /**
@@ -878,10 +890,18 @@ class BrowserPresenter @Inject constructor(
             compositeDisposable += model.deleteTab(downloadsTabId)
                 .observeOn(mainScheduler)
                 .subscribe()
+            maybeShowNativeAdAfterDownloadsBack()
             return
         }
 
         loadHomePage()
+        maybeShowNativeAdAfterDownloadsBack()
+    }
+
+    private fun maybeShowNativeAdAfterDownloadsBack() {
+        if (!incognitoMode) {
+            view?.showNativeAdAfterDownloadsBack()
+        }
     }
 
     private fun isHomeScreenUrl(url: String): Boolean =
