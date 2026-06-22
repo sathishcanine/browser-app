@@ -6,9 +6,12 @@ import okhttp3.Dispatcher
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.DataOutputStream
 import java.io.File
 import java.io.IOException
 import java.io.RandomAccessFile
+import java.nio.channels.FileChannel
+import java.nio.file.StandardOpenOption
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
@@ -20,6 +23,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 
 /**
@@ -96,7 +100,8 @@ class DownloadEngine @Inject constructor(
         existingETag: String?,
         existingLastModified: String?,
         parallelConnections: Int = 1,
-        onProgress: (Long, Long) -> Unit
+        onProgress: (Long, Long) -> Unit,
+        onFinalizing: () -> Unit = {},
     ): Result {
         if (url.toHttpUrlOrNull() == null) {
             return Result.Failure(IllegalArgumentException("Invalid URL: $url"))
@@ -111,9 +116,14 @@ class DownloadEngine @Inject constructor(
                 existingETag = existingETag,
                 existingLastModified = existingLastModified,
                 onProgress = onProgress,
+                onFinalizing = onFinalizing,
             )) {
                 is ParallelOutcome.Completed -> return parallel.result
-                ParallelOutcome.FallbackToSingle -> Unit
+                ParallelOutcome.FallbackToSingle -> {
+                    if (hasParallelStaging(stagingFile)) {
+                        return Result.Retry(IOException("Resuming parallel transfer"))
+                    }
+                }
             }
         }
 
@@ -141,6 +151,7 @@ class DownloadEngine @Inject constructor(
         existingETag: String?,
         existingLastModified: String?,
         onProgress: (Long, Long) -> Unit,
+        onFinalizing: () -> Unit,
     ): ParallelOutcome {
         val probe = probeResource(url, userAgent) ?: return ParallelOutcome.FallbackToSingle
         if (!probe.acceptsRanges || probe.totalBytes < MIN_PARALLEL_BYTES) {
@@ -152,70 +163,124 @@ class DownloadEngine @Inject constructor(
         partDir.mkdirs()
 
         val existingPartCount = partDir.listFiles()
-            ?.count { it.isFile && it.name.startsWith("part-") }
+            ?.count { it.isFile && it.name.startsWith(PART_FILE_PREFIX) }
             ?: 0
 
+        val savedLayout = ParallelDownloadManifest.load(partDir)
+        val layoutTotalBytes = when {
+            savedLayout != null && ParallelDownloadManifest.isCompatible(savedLayout, probe.totalBytes) ->
+                savedLayout.totalBytes
+            else -> probe.totalBytes
+        }
+
         val resolvedConnections = when {
-            connections <= PARALLEL_AUTO -> dynamicParallelConnections(probe.totalBytes)
+            connections <= PARALLEL_AUTO -> dynamicParallelConnections(layoutTotalBytes)
             else -> connections
         }
-        // Reuse the same part layout when resuming so byte ranges stay aligned with part files.
         val effectiveConnections = when {
+            savedLayout != null && ParallelDownloadManifest.isCompatible(savedLayout, probe.totalBytes) ->
+                savedLayout.connections
             existingPartCount > 1 -> existingPartCount.coerceIn(2, MAX_CONNECTIONS)
-            else -> effectiveConnections(resolvedConnections, probe.totalBytes)
+            else -> effectiveConnections(resolvedConnections, layoutTotalBytes)
         }
         if (effectiveConnections <= 1) {
             return ParallelOutcome.FallbackToSingle
         }
 
-        val ranges = splitRanges(probe.totalBytes, effectiveConnections)
-        val partFiles = ranges.mapIndexed { index, _ -> File(partDir, "part-$index") }
+        val ranges = when {
+            savedLayout != null && ParallelDownloadManifest.isCompatible(savedLayout, probe.totalBytes) ->
+                savedLayout.ranges.map { ByteRange(it.start, it.endInclusive) }
+            else -> splitRanges(layoutTotalBytes, effectiveConnections).also { split ->
+                ParallelDownloadManifest.save(
+                    partDir,
+                    layoutTotalBytes,
+                    split.map { ParallelDownloadManifest.SavedRange(it.start, it.endInclusive) },
+                )
+            }
+        }
+        val partFiles = ranges.mapIndexed { index, _ -> File(partDir, "$PART_FILE_PREFIX$index") }
+        val legacyParts = usesLegacyPartStorage(partFiles, stagingFile, layoutTotalBytes)
+
+        ranges.indices.forEach { index ->
+            val part = partFiles[index]
+            val range = ranges[index]
+            if (part.exists() && partBytesCompleted(part, range, legacyParts) > range.length) {
+                logger.log(TAG, "Resetting oversized part-$index progress for $url")
+                part.delete()
+            }
+        }
 
         val hasOversizedParts = ranges.indices.any { index ->
             val part = partFiles[index]
-            part.exists() && part.length() > ranges[index].length
+            part.exists() && partBytesCompleted(part, ranges[index], legacyParts) > ranges[index].length
         }
         if (hasOversizedParts) {
-            logger.log(TAG, "Incompatible parallel parts for $url; falling back to single connection")
-            clearPartFiles(stagingFile)
-            return ParallelOutcome.FallbackToSingle
+            logger.log(TAG, "Incompatible parallel parts for $url after reset; retrying layout")
+            return ParallelOutcome.Completed(Result.Retry(IOException("Parallel part metadata reset")))
+        }
+
+        if (!legacyParts) {
+            preallocateStaging(stagingFile, layoutTotalBytes)
         }
 
         val initialBytes = ranges.indices.sumOf { index ->
-            partFiles[index].takeIf { it.exists() }?.length()?.coerceAtMost(ranges[index].length) ?: 0L
+            partBytesCompleted(partFiles[index], ranges[index], legacyParts)
         }
-        safeProgress(onProgress, initialBytes, probe.totalBytes)
+        safeProgress(onProgress, initialBytes, layoutTotalBytes)
 
         val downloaded = AtomicLong(initialBytes)
         val lastProgressEmit = AtomicLong(0L)
+        val lastProgressBytes = AtomicLong(initialBytes)
         logger.log(
             TAG,
             "Parallel download: $effectiveConnections connections for $url " +
-                "(${probe.totalBytes} bytes, requested=${if (connections <= PARALLEL_AUTO) "auto" else connections})",
+                "(${layoutTotalBytes} bytes, legacyParts=$legacyParts)",
         )
 
         val partResults = try {
             coroutineScope {
                 ranges.mapIndexed { index, range ->
                     async {
-                        downloadPart(
-                            url = url,
-                            range = range,
-                            partFile = partFiles[index],
-                            userAgent = userAgent,
-                            eTag = existingETag ?: probe.eTag,
-                            lastModified = existingLastModified ?: probe.lastModified,
-                            onBytesWritten = { delta ->
-                                val now = downloaded.addAndGet(delta)
-                                val lastEmit = lastProgressEmit.get()
-                                val time = System.currentTimeMillis()
-                                if (time - lastEmit >= PROGRESS_EMIT_INTERVAL_MS &&
-                                    lastProgressEmit.compareAndSet(lastEmit, time)
-                                ) {
-                                    safeProgress(onProgress, now, probe.totalBytes)
-                                }
-                            },
-                        )
+                        if (legacyParts) {
+                            downloadPartLegacy(
+                                url = url,
+                                range = range,
+                                partFile = partFiles[index],
+                                userAgent = userAgent,
+                                eTag = existingETag ?: probe.eTag,
+                                lastModified = existingLastModified ?: probe.lastModified,
+                                onBytesWritten = { delta ->
+                                    reportParallelProgress(
+                                        downloaded,
+                                        lastProgressEmit,
+                                        lastProgressBytes,
+                                        delta,
+                                        onProgress,
+                                        layoutTotalBytes,
+                                    )
+                                },
+                            )
+                        } else {
+                            downloadPartToStaging(
+                                url = url,
+                                stagingFile = stagingFile,
+                                range = range,
+                                progressFile = partFiles[index],
+                                userAgent = userAgent,
+                                eTag = existingETag ?: probe.eTag,
+                                lastModified = existingLastModified ?: probe.lastModified,
+                                onBytesWritten = { delta ->
+                                    reportParallelProgress(
+                                        downloaded,
+                                        lastProgressEmit,
+                                        lastProgressBytes,
+                                        delta,
+                                        onProgress,
+                                        layoutTotalBytes,
+                                    )
+                                },
+                            )
+                        }
                     }
                 }.awaitAll()
             }
@@ -235,33 +300,195 @@ class DownloadEngine @Inject constructor(
             return ParallelOutcome.Completed(firstRetry)
         }
 
-        for ((index, range) in ranges.withIndex()) {
-            val part = partFiles[index]
-            if (!part.exists() || part.length() != range.length) {
-                return ParallelOutcome.Completed(
-                    Result.Failure(IOException("Part $index incomplete after parallel transfer"))
-                )
-            }
+        val tailResult = finishIncompleteParts(
+            url = url,
+            stagingFile = stagingFile,
+            ranges = ranges,
+            partFiles = partFiles,
+            legacyParts = legacyParts,
+            userAgent = userAgent,
+            eTag = existingETag ?: probe.eTag,
+            lastModified = existingLastModified ?: probe.lastModified,
+            downloaded = downloaded,
+            lastProgressEmit = lastProgressEmit,
+            lastProgressBytes = lastProgressBytes,
+            onProgress = onProgress,
+            totalBytes = layoutTotalBytes,
+            onFinalizing = onFinalizing,
+        )
+        if (tailResult != null) {
+            return ParallelOutcome.Completed(tailResult)
         }
 
+        safeProgress(onProgress, downloaded.get(), layoutTotalBytes)
+
         return try {
-            joinParts(stagingFile, partFiles)
-            safeProgress(onProgress, probe.totalBytes, probe.totalBytes)
+            if (legacyParts) {
+                onFinalizing()
+                joinParts(stagingFile, partFiles)
+            } else {
+                clearPartFiles(stagingFile)
+                stagingFile.parentFile?.let { ParallelDownloadManifest.delete(it) }
+            }
+            safeProgress(onProgress, layoutTotalBytes, layoutTotalBytes)
             ParallelOutcome.Completed(
                 Result.Success(
-                    totalBytes = probe.totalBytes,
+                    totalBytes = layoutTotalBytes,
                     mimeType = probe.mimeType,
                     eTag = probe.eTag,
                     lastModified = probe.lastModified,
-                )
+                ),
             )
         } catch (io: IOException) {
-            logger.log(TAG, "Failed to join parallel parts for $url", io)
+            logger.log(TAG, "Failed to finalize parallel download for $url", io)
             ParallelOutcome.Completed(Result.Retry(io))
         }
     }
 
-    private suspend fun downloadPart(
+    /**
+     * Re-download only the byte ranges that finished short. This is the common tail failure when
+     * a CDN drops a connection with a few hundred KB left in one part.
+     */
+    private suspend fun finishIncompleteParts(
+        url: String,
+        stagingFile: File,
+        ranges: List<ByteRange>,
+        partFiles: List<File>,
+        legacyParts: Boolean,
+        userAgent: String?,
+        eTag: String?,
+        lastModified: String?,
+        downloaded: AtomicLong,
+        lastProgressEmit: AtomicLong,
+        lastProgressBytes: AtomicLong,
+        onProgress: (Long, Long) -> Unit,
+        totalBytes: Long,
+        onFinalizing: () -> Unit,
+    ): Result? {
+        repeat(TAIL_PART_COMPLETION_ROUNDS) { round ->
+            val incomplete = ranges.indices.filter { index ->
+                partBytesCompleted(partFiles[index], ranges[index], legacyParts) < ranges[index].length
+            }
+            if (incomplete.isEmpty()) return null
+            if (round == 0) {
+                onFinalizing()
+            }
+            logger.log(
+                TAG,
+                "Finishing ${incomplete.size} incomplete parallel part(s) for $url (round ${round + 1})",
+            )
+            for (index in incomplete) {
+                val range = ranges[index]
+                val result = if (legacyParts) {
+                    downloadPartLegacy(
+                        url = url,
+                        range = range,
+                        partFile = partFiles[index],
+                        userAgent = userAgent,
+                        eTag = eTag,
+                        lastModified = lastModified,
+                        onBytesWritten = { delta ->
+                            reportParallelProgress(
+                                downloaded,
+                                lastProgressEmit,
+                                lastProgressBytes,
+                                delta,
+                                onProgress,
+                                totalBytes,
+                            )
+                        },
+                    )
+                } else {
+                    downloadPartToStaging(
+                        url = url,
+                        stagingFile = stagingFile,
+                        range = range,
+                        progressFile = partFiles[index],
+                        userAgent = userAgent,
+                        eTag = eTag,
+                        lastModified = lastModified,
+                        onBytesWritten = { delta ->
+                            reportParallelProgress(
+                                downloaded,
+                                lastProgressEmit,
+                                lastProgressBytes,
+                                delta,
+                                onProgress,
+                                totalBytes,
+                            )
+                        },
+                    )
+                }
+                when (result) {
+                    is Result.Failure -> return result
+                    is Result.Retry -> if (round == TAIL_PART_COMPLETION_ROUNDS - 1) return result
+                    else -> Unit
+                }
+            }
+            if (round < TAIL_PART_COMPLETION_ROUNDS - 1) {
+                delay(TAIL_PART_RETRY_DELAY_MS)
+            }
+        }
+        val index = ranges.indices.firstOrNull { i ->
+            partBytesCompleted(partFiles[i], ranges[i], legacyParts) < ranges[i].length
+        } ?: return null
+        val completed = partBytesCompleted(partFiles[index], ranges[index], legacyParts)
+        return partSizeCheck(ranges[index], completed, "Part $index")
+            ?: Result.Retry(IOException("Part $index still incomplete after tail completion"))
+    }
+
+    private fun hasParallelStaging(stagingFile: File): Boolean {
+        val parent = stagingFile.parentFile ?: return false
+        return ParallelDownloadManifest.exists(parent) ||
+            parent.listFiles()?.any { it.isFile && it.name.startsWith(PART_FILE_PREFIX) } == true
+    }
+
+    private fun resumeBytesForSingle(stagingFile: File): Long {
+        val parent = stagingFile.parentFile
+        if (parent != null && hasParallelStaging(stagingFile)) {
+            val partFiles = parent.listFiles()
+                ?.filter { it.isFile && it.name.startsWith(PART_FILE_PREFIX) }
+                .orEmpty()
+            if (partFiles.isNotEmpty()) {
+                val legacy = partFiles.any { it.length() > PART_PROGRESS_BYTES }
+                return if (legacy) {
+                    partFiles.sumOf { it.length().coerceAtLeast(0L) }
+                } else {
+                    partFiles.sumOf { readPartProgress(it) }
+                }
+            }
+            return 0L
+        }
+        return if (stagingFile.exists()) stagingFile.length().coerceAtLeast(0L) else 0L
+    }
+
+    private fun reportParallelProgress(
+        downloaded: AtomicLong,
+        lastProgressEmit: AtomicLong,
+        lastProgressBytes: AtomicLong,
+        delta: Long,
+        onProgress: (Long, Long) -> Unit,
+        totalBytes: Long,
+    ) {
+        val now = downloaded.addAndGet(delta)
+        val time = System.currentTimeMillis()
+        var lastEmitTime = lastProgressEmit.get()
+        while (true) {
+            val elapsed = time - lastEmitTime
+            val lastEmitBytes = lastProgressBytes.get()
+            if (elapsed < PROGRESS_EMIT_INTERVAL_MS && now - lastEmitBytes < PROGRESS_EMIT_MIN_BYTES) {
+                return
+            }
+            if (lastProgressEmit.compareAndSet(lastEmitTime, time)) {
+                lastProgressBytes.set(now)
+                safeProgress(onProgress, now, totalBytes)
+                return
+            }
+            lastEmitTime = lastProgressEmit.get()
+        }
+    }
+
+    private suspend fun downloadPartLegacy(
         url: String,
         range: ByteRange,
         partFile: File,
@@ -299,7 +526,7 @@ class DownloadEngine @Inject constructor(
 
             return response.use { resp ->
                 when {
-                    resp.code == 416 -> Result.Success(range.length, null, eTag, lastModified)
+                    resp.code == 416 -> handlePart416(range, partFile.length().coerceAtMost(range.length))
                     resp.code != 206 -> Result.Failure(
                         IOException(
                             "HTTP ${resp.code} for parallel part bytes=$requestStart-${range.endInclusive} " +
@@ -314,12 +541,16 @@ class DownloadEngine @Inject constructor(
                                 RandomAccessFile(partFile, "rw").use { raf ->
                                     raf.seek(existingBytes)
                                     val buffer = ByteArray(BUFFER_BYTES)
-                                    while (true) {
+                                    var partBytes = existingBytes
+                                    while (partBytes < range.length) {
                                         coroutineContext.ensureActive()
                                         val read = input.read(buffer)
                                         if (read == -1) break
-                                        raf.write(buffer, 0, read)
-                                        onBytesWritten(read.toLong())
+                                        val toWrite = minOf(read, (range.length - partBytes).toInt())
+                                        if (toWrite <= 0) break
+                                        raf.write(buffer, 0, toWrite)
+                                        partBytes += toWrite
+                                        onBytesWritten(toWrite.toLong())
                                     }
                                 }
                             }
@@ -327,19 +558,99 @@ class DownloadEngine @Inject constructor(
                             return Result.Retry(io)
                         }
 
-                        val finalLength = partFile.length()
-                        if (finalLength != range.length) {
-                            Result.Failure(
-                                IOException("Part size mismatch: expected ${range.length}, got $finalLength")
-                            )
-                        } else {
-                            Result.Success(
+                        val finalLength = partFile.length().coerceAtMost(range.length)
+                        partSizeCheck(range, finalLength, "bytes=${range.start}-${range.endInclusive}")
+                            ?.let { return it }
+                        Result.Success(
                                 range.length,
                                 resp.header("Content-Type")?.substringBefore(';')?.trim(),
                                 eTag,
                                 lastModified,
                             )
+                    }
+                }
+            }
+        } finally {
+            cancelHandle?.dispose()
+        }
+    }
+
+    private suspend fun downloadPartToStaging(
+        url: String,
+        stagingFile: File,
+        range: ByteRange,
+        progressFile: File,
+        userAgent: String?,
+        eTag: String?,
+        lastModified: String?,
+        onBytesWritten: (Long) -> Unit,
+    ): Result {
+        val existingBytes = partBytesCompleted(progressFile, range, legacyParts = false)
+        if (existingBytes >= range.length) {
+            return Result.Success(range.length, null, eTag, lastModified)
+        }
+
+        val requestStart = range.start + existingBytes
+        val requestBuilder = buildRequest(url, userAgent)
+            .header("Range", "bytes=$requestStart-${range.endInclusive}")
+        if (existingBytes > 0L) {
+            (eTag ?: lastModified)?.let { requestBuilder.header("If-Range", it) }
+        }
+
+        val call = httpClient.newCall(requestBuilder.build())
+        val cancelHandle = attachCancellation(call, coroutineContext[Job])
+
+        try {
+            val response = try {
+                call.execute()
+            } catch (io: IOException) {
+                return Result.Retry(io)
+            }
+
+            return response.use { resp ->
+                when {
+                    resp.code == 416 -> handlePart416(range, existingBytes)
+                    resp.code != 206 -> Result.Failure(
+                        IOException(
+                            "HTTP ${resp.code} for parallel part bytes=$requestStart-${range.endInclusive} " +
+                                "(range response required)",
+                        ),
+                    )
+                    else -> {
+                        val body = resp.body ?: return Result.Failure(IOException("Empty body for part"))
+                        progressFile.parentFile?.takeIf { !it.exists() }?.mkdirs()
+                        try {
+                            body.byteStream().use { input ->
+                                RandomAccessFile(stagingFile, "rw").use { raf ->
+                                    raf.seek(range.start + existingBytes)
+                                    val buffer = ByteArray(BUFFER_BYTES)
+                                    var bytesInRange = existingBytes
+                                    while (bytesInRange < range.length) {
+                                        coroutineContext.ensureActive()
+                                        val read = input.read(buffer)
+                                        if (read == -1) break
+                                        val toWrite = minOf(read, (range.length - bytesInRange).toInt())
+                                        if (toWrite <= 0) break
+                                        raf.write(buffer, 0, toWrite)
+                                        bytesInRange += toWrite
+                                        writePartProgress(progressFile, bytesInRange)
+                                        onBytesWritten(toWrite.toLong())
+                                    }
+                                }
+                            }
+                        } catch (io: IOException) {
+                            return Result.Retry(io)
                         }
+
+                        val finalBytes = partBytesCompleted(progressFile, range, legacyParts = false)
+                        partSizeCheck(range, finalBytes, "bytes=${range.start}-${range.endInclusive}")
+                            ?.let { return it }
+                        Result.Success(
+                            range.length,
+                            resp.header("Content-Type")?.substringBefore(';')?.trim(),
+                            eTag,
+                            lastModified,
+                        )
                     }
                 }
             }
@@ -356,7 +667,7 @@ class DownloadEngine @Inject constructor(
         existingLastModified: String?,
         onProgress: (Long, Long) -> Unit
     ): Result {
-        val existingBytes = if (stagingFile.exists()) stagingFile.length() else 0L
+        val existingBytes = resumeBytesForSingle(stagingFile)
 
         val requestBuilder = buildRequest(url, userAgent)
         if (existingBytes > 0L) {
@@ -497,6 +808,8 @@ class DownloadEngine @Inject constructor(
 
             if (totalBytes <= 0L) return null
 
+            logger.log(TAG, "Probe ${resp.request.url}: protocol=${resp.protocol}, ranges=$acceptsRanges, size=$totalBytes")
+
             ProbeResult(
                 totalBytes = totalBytes,
                 acceptsRanges = acceptsRanges,
@@ -537,7 +850,7 @@ class DownloadEngine @Inject constructor(
     private fun clearPartFiles(stagingFile: File) {
         stagingFile.parentFile
             ?.listFiles()
-            ?.filter { it.name.startsWith("part-") }
+            ?.filter { it.name.startsWith(PART_FILE_PREFIX) }
             ?.forEach { it.delete() }
     }
 
@@ -547,12 +860,23 @@ class DownloadEngine @Inject constructor(
             throw IOException("Could not replace staging file ${destination.absolutePath}")
         }
         try {
-            destination.outputStream().use { out ->
+            FileChannel.open(
+                destination.toPath(),
+                StandardOpenOption.CREATE,
+                StandardOpenOption.WRITE,
+                StandardOpenOption.TRUNCATE_EXISTING,
+            ).use { outChannel ->
                 for (part in parts) {
                     if (!part.exists()) {
                         throw IOException("Missing part file ${part.name} during join")
                     }
-                    part.inputStream().use { input -> input.copyTo(out) }
+                    FileChannel.open(part.toPath(), StandardOpenOption.READ).use { inChannel ->
+                        var position = 0L
+                        val size = part.length()
+                        while (position < size) {
+                            position += inChannel.transferTo(position, size - position, outChannel)
+                        }
+                    }
                 }
             }
         } catch (t: Throwable) {
@@ -561,6 +885,99 @@ class DownloadEngine @Inject constructor(
         }
         parts.forEach { runCatching { it.delete() } }
     }
+
+    private fun preallocateStaging(stagingFile: File, totalBytes: Long) {
+        stagingFile.parentFile?.takeIf { !it.exists() }?.mkdirs()
+        RandomAccessFile(stagingFile, "rw").use { raf ->
+            raf.setLength(totalBytes)
+        }
+    }
+
+    private fun usesLegacyPartStorage(partFiles: List<File>, stagingFile: File, totalBytes: Long): Boolean {
+        if (stagingFile.exists() && stagingFile.length() >= totalBytes) {
+            return false
+        }
+        return partFiles.any { it.exists() && it.length() > PART_PROGRESS_BYTES }
+    }
+
+    private fun partBytesCompleted(partFile: File, range: ByteRange, legacyParts: Boolean): Long {
+        if (!partFile.exists()) return 0L
+        return if (legacyParts) {
+            partFile.length().coerceAtMost(range.length)
+        } else {
+            readPartProgress(partFile).coerceAtMost(range.length)
+        }
+    }
+
+    private fun readPartProgress(progressFile: File): Long {
+        if (!progressFile.exists()) return 0L
+        val length = progressFile.length()
+        if (length <= 0L) return 0L
+        if (length > PART_PROGRESS_BYTES) {
+            return length
+        }
+        return progressFile.inputStream().use { input ->
+            val buffer = ByteArray(PART_PROGRESS_BYTES.toInt())
+            val read = input.read(buffer)
+            if (read < 8) 0L else {
+                var value = 0L
+                for (i in 0 until 8) {
+                    value = (value shl 8) or (buffer[i].toLong() and 0xFF)
+                }
+                value
+            }
+        }
+    }
+
+    private fun writePartProgress(progressFile: File, bytesInRange: Long) {
+        progressFile.outputStream().use { out ->
+            DataOutputStream(out).use { data ->
+                data.writeLong(bytesInRange)
+            }
+        }
+    }
+
+    /**
+     * A parallel part that ends short of its range is usually a dropped connection near EOF.
+     * Resume the part instead of failing the whole download permanently.
+     */
+    private fun partSizeCheck(range: ByteRange, actualBytes: Long, label: String): Result? {
+        if (actualBytes == range.length) return null
+        return when {
+            actualBytes < range.length -> {
+                val shortBy = range.length - actualBytes
+                logger.log(
+                    TAG,
+                    "$label truncated by $shortBy bytes ($actualBytes/${range.length}); will resume part",
+                )
+                Result.Retry(
+                    IOException("Part incomplete: $actualBytes/${range.length} bytes ($shortBy short)"),
+                )
+            }
+            else -> {
+                logger.log(
+                    TAG,
+                    "$label overshoot by ${actualBytes - range.length} bytes; will reset part",
+                )
+                Result.Retry(
+                    IOException("Part overshoot: expected ${range.length}, got $actualBytes"),
+                )
+            }
+        }
+    }
+
+    private fun handlePart416(range: ByteRange, completedBytes: Long): Result =
+        if (completedBytes >= range.length) {
+            Result.Success(range.length, null, null, null)
+        } else {
+            logger.log(
+                TAG,
+                "HTTP 416 for bytes=${range.start}-${range.endInclusive} with only $completedBytes/${range.length}",
+            )
+            Result.Retry(
+                IOException("Range not satisfiable; part only $completedBytes/${range.length} bytes"),
+            )
+        }
 
     private fun safeProgress(onProgress: (Long, Long) -> Unit, written: Long, total: Long) {
         runCatching { onProgress(written, total) }.onFailure {
@@ -589,12 +1006,18 @@ class DownloadEngine @Inject constructor(
 
     companion object {
         private const val TAG = "DownloadEngine"
-        private const val BUFFER_BYTES = 64 * 1024
-        private const val PROGRESS_INTERVAL_BYTES = 256 * 1024L
-        private const val MIN_PARALLEL_BYTES = 2L * 1024 * 1024
+        private const val BUFFER_BYTES = 256 * 1024
+        private const val JOIN_BUFFER_BYTES = 256 * 1024
+        private const val PROGRESS_INTERVAL_BYTES = 32 * 1024L
+        private const val MIN_PARALLEL_BYTES = 1L * 1024 * 1024
         private const val MIN_PART_BYTES = 512L * 1024
         private const val MAX_CONNECTIONS = 12
-        private const val PROGRESS_EMIT_INTERVAL_MS = 250L
+        private const val PROGRESS_EMIT_INTERVAL_MS = 16L
+        private const val PROGRESS_EMIT_MIN_BYTES = 32 * 1024L
+        private const val TAIL_PART_COMPLETION_ROUNDS = 8
+        private const val TAIL_PART_RETRY_DELAY_MS = 1_500L
+        private const val PART_FILE_PREFIX = "part-"
+        private const val PART_PROGRESS_BYTES = 8L
         private const val LARGE_FILE_THRESHOLD_BYTES = 400L * 1024 * 1024
         private const val VERY_LARGE_FILE_THRESHOLD_BYTES = 2L * 1024 * 1024 * 1024
         private const val CONNECTIONS_SMALL_FILE = 4

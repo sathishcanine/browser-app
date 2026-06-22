@@ -125,15 +125,18 @@
     <string name="download_failed">Download failed</string>
     <string name="download_cancelled">Download cancelled</string>
     <string name="download_action_cancel">Cancel</string>
+    <string name="download_action_pause">Pause</string>
+    <string name="download_notification_eta_seconds">About %1$d seconds left</string>
+    <string name="download_notification_eta_minutes">About %1$d min left</string>
+    <string name="download_notification_eta_hours">About %1$d hr left</string>
     <string name="download_status_pending">Pending</string>
     <string name="download_status_running">Downloading</string>
+    <string name="download_status_finishing">Finishing…</string>
     <string name="download_status_paused">Paused</string>
     <string name="download_status_retrying">Retrying</string>
     <string name="download_status_failed">Failed</string>
     <string name="download_status_cancelled">Cancelled</string>
     <string name="download_status_completed">Completed</string>
-    <string name="download_parallel_accelerated_title">Accelerated downloads</string>
-    <string name="download_parallel_accelerated_summary">Split large files into multiple parts for faster downloads. Uses 4 connections up to 400 MB, 8 up to 2 GB, and 12 for larger files.</string>
     <!-- In-app downloads page -->
     <string name="downloads_filter_all">All</string>
     <string name="downloads_filter_active">Active</string>
@@ -171,8 +174,6 @@
     <string name="downloads_bridge_missing">Downloads bridge unavailable on this WebView.</string>
     <string name="prefer_external_app_for_downloads_title">Open downloadable links in another app</string>
     <string name="prefer_external_app_for_downloads_summary">When off (recommended), all downloads start directly in Minnal. When on, links like .mp4 first try a video player and may show an "Open with" chooser.</string>
-    <string name="discover_feed_title">Show news on home page</string>
-    <string name="discover_feed_summary">Aggregates a curated set of Tamil + English news feeds (RSS) and shows them below the bookmarks. No accounts, no tracking.</string>
     <string name="push_notification_channel_id">minnal_announcements</string>
     <string name="push_notification_channel_name">App announcements</string>
     <string name="push_notification_channel_description">Update alerts and announcements from Minnal</string>
@@ -193,6 +194,7 @@
     <string name="max_tabs">Max tabs reached</string>
     <string name="message_text_copied">Text copied to clipboard</string>
     <string name="message_link_copied">Link copied to clipboard</string>
+    <string name="message_press_back_again_to_exit">Press back again to exit</string>
     <string name="message_blocked_local">Local file has been blocked from loading</string>
     <string name="message_popup_ad_blocked">We blocked a Popup AD for You</string>
     <string name="licenses">Open Source Licenses</string>

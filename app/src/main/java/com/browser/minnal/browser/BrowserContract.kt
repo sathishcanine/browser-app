@@ -309,6 +309,11 @@ interface BrowserContract {
         fun backgroundBrowser()
 
         /**
+         * Hint that another back press on the home page will close the app.
+         */
+        fun promptPressBackAgainToExit()
+
+        /**
          * launch the incognito browser and load the provided [url].
          */
         fun launchIncognito(url: String?)

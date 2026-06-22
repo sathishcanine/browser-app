@@ -56,4 +56,11 @@
     <color name="onboarding_text_primary">#FFFFFF</color>
     <color name="onboarding_text_secondary">#B3FFFFFF</color>
 
+    <color name="download_notification_title">#FFFFFFFF</color>
+    <color name="download_notification_speed">#4DD0E1</color>
+    <color name="download_notification_size">#B0BEC5</color>
+    <color name="download_notification_eta">#80CBC4</color>
+    <color name="download_notification_action_text">#E3F2FD</color>
+    <color name="download_notification_accent">#00BCD4</color>
+
 </resources>

@@ -68,13 +68,40 @@ class DownloadStorage @Inject constructor(
     fun stagedBytesDownloaded(url: String, fileName: String): Long {
         val parent = stagingDir(url)
         if (!parent.exists()) return 0L
+        val staging = File(parent, safeFileName(fileName))
         val partFiles = parent.listFiles()
             ?.filter { it.isFile && it.name.startsWith(PART_FILE_PREFIX) }
             .orEmpty()
         if (partFiles.isNotEmpty()) {
-            return partFiles.sumOf { it.length().coerceAtLeast(0L) }
+            val legacy = partFiles.any { it.length() > PART_PROGRESS_BYTES }
+            if (legacy) {
+                return partFiles.sumOf { it.length().coerceAtLeast(0L) }
+            }
+            // Parallel direct-write: staging may be pre-allocated to full size; part-N files
+            // hold per-range byte counters (8 bytes each).
+            return partFiles.sumOf { readPartProgressForStorage(it) }
         }
-        return File(parent, safeFileName(fileName)).takeIf { it.exists() }?.length()?.coerceAtLeast(0L) ?: 0L
+        if (staging.exists() && staging.length() > 0L) {
+            return staging.length().coerceAtLeast(0L)
+        }
+        return 0L
+    }
+
+    private fun readPartProgressForStorage(progressFile: File): Long {
+        if (!progressFile.exists()) return 0L
+        val length = progressFile.length()
+        if (length < 8L) return 0L
+        if (length > PART_PROGRESS_BYTES) return length
+        return progressFile.inputStream().use { input ->
+            val buffer = ByteArray(8)
+            if (input.read(buffer) < 8) 0L else {
+                var value = 0L
+                for (i in 0 until 8) {
+                    value = (value shl 8) or (buffer[i].toLong() and 0xFF)
+                }
+                value
+            }
+        }
     }
 
     private fun safeFileName(fileName: String): String {
@@ -147,8 +174,10 @@ class DownloadStorage @Inject constructor(
             ?: error("MediaStore.insert returned null for $uniqueName")
 
         try {
-            resolver.openOutputStream(itemUri, "w")?.use { out ->
-                FileInputStream(stagingFile).use { input -> input.copyTo(out) }
+            resolver.openOutputStream(itemUri, "w")?.use { rawOut ->
+                rawOut.buffered(JOIN_BUFFER_BYTES).use { out ->
+                    FileInputStream(stagingFile).use { input -> input.copyTo(out) }
+                }
             } ?: error("MediaStore.openOutputStream returned null for $itemUri")
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -232,5 +261,7 @@ class DownloadStorage @Inject constructor(
     companion object {
         private const val STAGING_DIR = "inbuilt-downloads"
         private const val PART_FILE_PREFIX = "part-"
+        private const val PART_PROGRESS_BYTES = 8L
+        private const val JOIN_BUFFER_BYTES = 256 * 1024
     }
 }

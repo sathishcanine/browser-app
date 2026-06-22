@@ -130,18 +130,14 @@
 -keep @androidx.room.Dao interface *
 -keep class androidx.room.** { *; }
 
-# WebView JavaScript bridges (MinnalDownloads, MinnalNews). Without this, R8 renames
+# WebView JavaScript bridges (MinnalDownloads, MinnalHome). Without this, R8 renames
 # @JavascriptInterface methods in release: JS calls fail silently (try/catch → empty list),
 # while WorkManager may still run — matching "Play bundle: no ads / no download UI progress".
 -keepclassmembers class * {
     @android.webkit.JavascriptInterface <methods>;
 }
-# Explicit hosts (Kotlin + R8): bookmarks Discover section calls isEnabled() before un-hiding;
-# if that name is obfuscated the IIFE catches and returns — section stays hidden (no news).
+# Explicit hosts (Kotlin + R8): bridge method names must stay stable for release WebView pages.
 -keepclassmembers class com.browser.minnal.download.manager.DownloadsBridge {
-    @android.webkit.JavascriptInterface <methods>;
-}
--keepclassmembers class com.browser.minnal.news.NewsBridge {
     @android.webkit.JavascriptInterface <methods>;
 }
 -keepclassmembers class com.browser.minnal.html.homepage.HomePageBridge {

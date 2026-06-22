@@ -95,6 +95,7 @@
             android:name="com.browser.minnal.DefaultBrowserActivity"
             android:alwaysRetainTaskState="true"
             android:clearTaskOnLaunch="false"
+            android:stopWithTask="false"
             android:colorMode="wideColorGamut"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|keyboard"
             android:exported="true"
@@ -247,6 +248,11 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <service
+            android:name="com.browser.minnal.download.manager.DownloadForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <!-- WorkManager hosts our long-running download via SystemForegroundService. Android 14+
              (API 34) requires every foreground service to declare its type, so we override the

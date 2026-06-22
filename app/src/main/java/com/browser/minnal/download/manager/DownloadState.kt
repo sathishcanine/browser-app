@@ -20,6 +20,8 @@ data class DownloadState(
     val mimeType: String? = null,
     /** Instantaneous transfer rate sampled by the worker. 0 when unknown / not running. */
     val bytesPerSecond: Long = 0L,
+    /** True while merging parts or saving to Downloads (UI shows "Finishing…"). */
+    val finalizing: Boolean = false,
     /** Wall-clock millis the manager last touched this state, useful for "last updated" labels. */
     val updatedAt: Long = System.currentTimeMillis()
 ) {
@@ -27,7 +29,12 @@ data class DownloadState(
     val progressPercent: Int
         get() = when {
             totalBytes <= 0 -> -1
-            else -> ((bytesDownloaded * 100L) / totalBytes).toInt().coerceIn(0, 100)
+            finalizing -> 100
+            bytesDownloaded >= totalBytes -> when (status) {
+                DownloadStatus.RUNNING, DownloadStatus.RETRYING -> 99
+                else -> 100
+            }
+            else -> ((bytesDownloaded * 100L) / totalBytes).toInt().coerceIn(0, 99)
         }
 
     /** Estimated seconds remaining, or -1 when total size or speed is unknown. */

@@ -79,6 +79,7 @@ android {
                 "BOOKMARK_NATIVE_AD_DEFAULT_BROWSER_UNIT_ID",
                 "\"ca-app-pub-3940256099942544/2247696110\""
             )
+            buildConfigField("boolean", "ENABLE_DOWNLOADS_NATIVE_AD", "true")
             buildConfigField(
                 "String",
                 "DOWNLOADS_NATIVE_AD_UNIT_ID",
@@ -132,6 +133,7 @@ android {
                 "BOOKMARK_NATIVE_AD_DEFAULT_BROWSER_UNIT_ID",
                 "\"ca-app-pub-8723888126390754/6435034102\""
             )
+            buildConfigField("boolean", "ENABLE_DOWNLOADS_NATIVE_AD", "true")
             buildConfigField(
                 "String",
                 "DOWNLOADS_NATIVE_AD_UNIT_ID",

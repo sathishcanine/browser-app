@@ -17,7 +17,7 @@ import javax.inject.Inject
  *
  * 1. The page is a single static HTML file generated once per visit (no server-rendered list).
  *    All download data is fetched at runtime from `window.MinnalDownloads.list()` (see
- *    [com.browser.minnal.download.manager.DownloadsBridge]) and re-polled every ~750 ms so
+ *    [com.browser.minnal.download.manager.DownloadsBridge]) and re-polled every ~500 ms so
  *    progress, speed and ETA update live without a tab reload.
  *
  * 2. The page injects the current theme palette into CSS custom properties (light/dark, primary
@@ -113,12 +113,13 @@ class DownloadPageFactory @Inject constructor(
     --space-4: 16px;
     --space-5: 20px;
     --space-6: 24px;
+    --bottom-chrome-inset: 96px;
     color-scheme: light dark;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; background: var(--surface); color: var(--on-surface);
     font-family: -apple-system, "Roboto", "Segoe UI", system-ui, sans-serif; }
-body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
+body { padding-bottom: calc(var(--bottom-chrome-inset) + 24px); -webkit-tap-highlight-color: transparent; }
 
 .app-bar { background: var(--surface);
     padding: var(--space-5) var(--space-4) var(--space-3);
@@ -237,7 +238,8 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
 .empty p { margin: 0; font-size: 14px; }
 
 /* Bulk-action bar */
-.bulk-bar { position: fixed; left: 12px; right: 12px; bottom: 16px;
+.bulk-bar { position: fixed; left: 12px; right: 12px;
+    bottom: calc(var(--bottom-chrome-inset) + 16px);
     background: var(--surface); border: 1px solid var(--surface-variant);
     border-radius: var(--radius-card); padding: 10px 12px;
     box-shadow: 0 6px 18px rgba(0,0,0,0.18);
@@ -245,8 +247,9 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
 .bulk-bar.open { display: flex; }
 .bulk-bar .label { flex: 1 1 auto; font-size: 14px; font-weight: 500; }
 
-/* Toast */
-.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+/* Toast — offset above browser chrome; fixed anchors to screen bottom in WebView */
+.toast { position: fixed; left: 50%; bottom: calc(var(--bottom-chrome-inset) + 16px);
+    transform: translateX(-50%);
     background: var(--on-surface); color: var(--surface);
     padding: 10px 16px; border-radius: var(--radius-pill); font-size: 13px;
     box-shadow: var(--shadow-card); opacity: 0; pointer-events: none;
@@ -317,6 +320,7 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
     };
 
     var statusByUrl = {};
+    var pollTimer = null;
 
     var els = {
         summary: document.getElementById("summary"),
@@ -361,20 +365,31 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
             var json = BRIDGE.list();
             var arr = JSON.parse(json || "[]");
             if (Array.isArray(arr)) {
-                // Ignore transient empty snapshots so the list does not flash blank while
-                // pause/resume or bridge URL checks are in flight.
-                if (arr.length > 0 || state.items.length === 0) {
-                    state.items = arr;
+                // A transient bridge/DB hiccup can return [] while SQLite still has rows.
+                if (arr.length === 0 && state.items.length > 0) {
+                    return;
                 }
+                state.items = arr;
             }
         } catch (e) { /* keep last good snapshot */ }
         detectNewCompletions(state.items);
         render();
     }
 
+    function removeItemFromState(url) {
+        state.items = state.items.filter(function(i) { return i.url !== url; });
+        delete statusByUrl[url];
+        if (state.selected.has(url)) state.selected.delete(url);
+        if (state.openMenuUrl === url) state.openMenuUrl = null;
+        render();
+    }
+
     function startPolling() {
         refresh();
-        setInterval(refresh, 750);
+        if (pollTimer) {
+            clearInterval(pollTimer);
+        }
+        pollTimer = setInterval(refresh, 500);
     }
 
     // --- Formatting helpers -------------------------------------------------
@@ -493,9 +508,17 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
     var lastSummaryText = "";
 
     function calcPct(item) {
-        return (item.totalBytes > 0)
-            ? Math.min(100, Math.max(0, Math.floor((item.bytesDownloaded * 100) / item.totalBytes)))
-            : -1;
+        if (item.finalizing) return 100;
+        if (item.totalBytes > 0) {
+            var pct = Math.floor((item.bytesDownloaded * 100) / item.totalBytes);
+            if (item.bytesDownloaded >= item.totalBytes) {
+                var status = item.status || "PENDING";
+                if (status === "RUNNING" || status === "RETRYING") return 99;
+                return 100;
+            }
+            return Math.min(99, Math.max(0, pct));
+        }
+        return -1;
     }
 
     function listStructuralKeyFor(items) {
@@ -525,7 +548,7 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
         // Coarse buckets only — the progress bar width is patched separately every tick.
         // Do not include raw % or speed here or the meta row flashes on each 750 ms poll.
         var bytesBucket = Math.floor((item.bytesDownloaded || 0) / 524288);
-        return status + "|" + bytesBucket;
+        return status + "|" + (item.finalizing ? "fin" : "") + "|" + bytesBucket;
     }
 
     function patchCard(card, item) {
@@ -681,19 +704,24 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
 
     function renderMeta(item, status, pct) {
         var bits = [];
-        var statusBadge = '<span class="badge ' + status.toLowerCase() + '">' + statusLabel(status) + '</span>';
+        var label = item.finalizing ? LABELS.finishing : statusLabel(status);
+        var statusBadge = '<span class="badge ' + status.toLowerCase() + '">' + escape(label) + '</span>';
         bits.push(statusBadge);
 
         if (status === "RUNNING" || status === "RETRYING" || status === "PAUSED") {
-            var dl = formatBytes(item.bytesDownloaded || 0);
-            var total = item.totalBytes > 0 ? formatBytes(item.totalBytes) : LABELS.unknownSize;
-            bits.push('<span class="sep">' + escape(dl + " / " + total) + '</span>');
-            if (pct >= 0) bits.push('<span class="sep">' + pct + '%</span>');
-            var spd = formatSpeed(item.bytesPerSecond);
-            if (spd) bits.push('<span class="sep">' + escape(spd) + '</span>');
-            var eta = formatEta(item.totalBytes > 0 && item.bytesPerSecond > 0
-                ? (item.totalBytes - item.bytesDownloaded) / item.bytesPerSecond : -1);
-            if (eta) bits.push('<span class="sep">' + escape(eta) + '</span>');
+            if (item.finalizing) {
+                bits.push('<span class="sep">' + escape(LABELS.finishing) + '</span>');
+            } else {
+                var dl = formatBytes(item.bytesDownloaded || 0);
+                var total = item.totalBytes > 0 ? formatBytes(item.totalBytes) : LABELS.unknownSize;
+                bits.push('<span class="sep">' + escape(dl + " / " + total) + '</span>');
+                if (pct >= 0) bits.push('<span class="sep">' + pct + '%</span>');
+                var spd = formatSpeed(item.bytesPerSecond);
+                if (spd) bits.push('<span class="sep">' + escape(spd) + '</span>');
+                var eta = formatEta(item.totalBytes > 0 && item.bytesPerSecond > 0
+                    ? (item.totalBytes - item.bytesDownloaded) / item.bytesPerSecond : -1);
+                if (eta) bits.push('<span class="sep">' + escape(eta) + '</span>');
+            }
         } else if (status === "PENDING") {
             bits.push('<span class="sep">' + LABELS.queued + '</span>');
         } else if (status === "COMPLETED") {
@@ -772,8 +800,16 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
             case "resume": call("resume", url); toast(LABELS.toast.resumed); break;
             case "cancel": call("cancel", url); toast(LABELS.toast.cancelled); break;
             case "retry": call("retry", url); toast(LABELS.toast.retrying); break;
-            case "delete": call("deleteEntry", url, false); toast(LABELS.toast.removed); break;
-            case "delete-with-file": call("deleteEntry", url, true); toast(LABELS.toast.deletedFile); break;
+            case "delete":
+                call("deleteEntry", url, false);
+                removeItemFromState(url);
+                toast(LABELS.toast.removed);
+                break;
+            case "delete-with-file":
+                call("deleteEntry", url, true);
+                removeItemFromState(url);
+                toast(LABELS.toast.deletedFile);
+                break;
             case "open":
                 if (BRIDGE && item) {
                     var ok = false;
@@ -837,8 +873,13 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
     els.bulkDelete.addEventListener("click", function() {
         var urls = Array.from(state.selected);
         urls.forEach(function(u) { call("deleteEntry", u, false); });
+        state.items = state.items.filter(function(i) { return urls.indexOf(i.url) === -1; });
+        urls.forEach(function(u) { delete statusByUrl[u]; });
         state.selected.clear();
+        if (urls.indexOf(state.openMenuUrl) !== -1) state.openMenuUrl = null;
+        updateBulk();
         toast(LABELS.toast.removed);
+        render();
         setTimeout(refresh, 50);
     });
 
@@ -850,6 +891,18 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
 
     // --- Toast --------------------------------------------------------------
     var toastTimer = null;
+    function applyBottomChromeInset() {
+        var insetPx = 96;
+        try {
+            if (BRIDGE && typeof BRIDGE.bottomChromeInsetPx === "function") {
+                insetPx = Math.max(0, BRIDGE.bottomChromeInsetPx());
+            }
+        } catch (e) { /* bridge unavailable */ }
+        document.documentElement.style.setProperty(
+            "--bottom-chrome-inset",
+            Math.max(insetPx, 56) + "px"
+        );
+    }
     function toast(msg) {
         if (!msg) return;
         els.toast.textContent = msg;
@@ -865,6 +918,9 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
         renderList();
     }
     setupListDelegation();
+    applyBottomChromeInset();
+    requestAnimationFrame(applyBottomChromeInset);
+    setTimeout(applyBottomChromeInset, 150);
     render();
     if (BRIDGE) {
         startPolling();
@@ -932,6 +988,7 @@ body { padding-bottom: 96px; -webkit-tap-highlight-color: transparent; }
                 "other": ${s(R.string.downloads_bulk_other)}
             },
             "queued": ${s(R.string.downloads_queued)},
+            "finishing": ${s(R.string.download_status_finishing)},
             "unknownSize": ${s(R.string.unknown_size)},
             "justNow": ${s(R.string.downloads_just_now)},
             "bridgeMissing": ${s(R.string.downloads_bridge_missing)}

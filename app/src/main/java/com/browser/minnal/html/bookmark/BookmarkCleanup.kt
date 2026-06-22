@@ -10,7 +10,7 @@ import javax.inject.Inject
 class BookmarkCleanup @Inject constructor(
     private val application: Application
 ) : Cleanup.Action {
-    override val versionCode: Int = 101
+    override val versionCode: Int = 102
 
     override suspend fun execute() {
         withContext(Dispatchers.IO) {

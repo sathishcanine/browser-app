@@ -729,7 +729,17 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         toolbarLayout.isVisible = false
     }
 
-    private fun computeBottomToolbarInset(): Int {
+    private fun computeBottomToolbarInset(): Int =
+        computeWebViewBottomOverlayInsetPx() +
+            resources.getDimensionPixelSize(R.dimen.radial_fab_extra_bottom_inset)
+
+    /**
+     * Height of browser chrome (toolbar, ad strips, find bar) that overlays the bottom of the
+     * WebView. Used by the in-app downloads page to position fixed UI above the address bar.
+     */
+    internal fun webViewBottomOverlayInsetPx(): Int = computeWebViewBottomOverlayInsetPx()
+
+    private fun computeWebViewBottomOverlayInsetPx(): Int {
         val rootLocation = IntArray(2)
         binding.root.getLocationInWindow(rootLocation)
         val rootBottom = rootLocation[1] + binding.root.height
@@ -754,8 +764,7 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         }
 
         return (rootBottom - chromeTop)
-            .coerceAtLeast(resources.getDimensionPixelSize(R.dimen.toolbar_height_portrait)) +
-            resources.getDimensionPixelSize(R.dimen.radial_fab_extra_bottom_inset)
+            .coerceAtLeast(resources.getDimensionPixelSize(R.dimen.toolbar_height_portrait))
     }
 
     private fun showCloseAllTabsDialog() {
@@ -893,6 +902,11 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
         super.onResume()
         if (!isBrowserUiInitialized) {
             return
+        }
+        if (!isIncognito()) {
+            (application as BrowserApp).applicationComponent
+                .minnalDownloadManager()
+                .resumeActiveDownloads()
         }
         presenter.onViewShown()
         if (!isIncognito()) {

@@ -1,14 +1,14 @@
 package com.browser.minnal.download.manager
 
 import android.app.Application
-import com.browser.minnal.utils.VideoViewerIntent
 import android.content.Intent
 import android.net.Uri
+import com.browser.minnal.utils.VideoViewerIntent
 import android.text.format.Formatter
 import android.webkit.MimeTypeMap
 import android.webkit.URLUtil
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import androidx.work.WorkManager
 import com.browser.minnal.BuildConfig
 import com.browser.minnal.database.downloads.DownloadEntry
 import com.browser.minnal.database.downloads.DownloadStatus
@@ -39,8 +39,13 @@ class MinnalDownloadManager @Inject constructor(
     private val notifier: DownloadNotifier,
     private val storage: DownloadStorage,
     private val downloadRunner: DownloadRunner,
+    private val workScheduler: DownloadWorkScheduler,
+    private val activeRegistry: ActiveDownloadRegistry,
     private val logger: Logger,
 ) {
+
+    @Volatile
+    private var lastGoodDownloadsJson: String? = null
 
     /**
      * Live stream of [DownloadState] changes. Subscribe on the main scheduler in UI code.
@@ -57,6 +62,8 @@ class MinnalDownloadManager @Inject constructor(
      * Restart any downloads that were interrupted by process death. Call from [Application.onCreate].
      */
     fun resumeActiveDownloads() {
+        downloadRunner.refreshOngoingNotifications()
+        resurrectForegroundServiceIfNeeded()
         repository.getAllDownloads()
             .subscribeOn(Schedulers.io())
             .subscribe(
@@ -68,6 +75,12 @@ class MinnalDownloadManager @Inject constructor(
                             DownloadStatus.RETRYING -> {
                                 if (!downloadRunner.isActive(entry.url)) {
                                     downloadRunner.start(entry.url)
+                                }
+                            }
+                            DownloadStatus.PAUSED,
+                            DownloadStatus.FAILED -> {
+                                if (shouldAutoResumeInterrupted(entry) && !downloadRunner.isActive(entry.url)) {
+                                    resume(entry.url)
                                 }
                             }
                             else -> Unit
@@ -131,6 +144,7 @@ class MinnalDownloadManager @Inject constructor(
 
         return repository.upsertDownload(entry).subscribe(
             {
+                workScheduler.schedule(url)
                 downloadRunner.start(url)
                 logger.log(TAG, "Started download: ${entry.title} ($url)")
             },
@@ -160,7 +174,8 @@ class MinnalDownloadManager @Inject constructor(
                 )
             }
             downloadRunner.cancelActive(url)
-            WorkManager.getInstance(application).cancelUniqueWork(workName(url))
+            workScheduler.cancel(url)
+            activeRegistry.markInactive(url)
             runCatching { storage.deleteStaging(url) }
             notifier.cancel(url)
         }.onFailure { logger.log(TAG, "cancel failed for $url", it) }
@@ -195,11 +210,13 @@ class MinnalDownloadManager @Inject constructor(
                         totalBytes = totalBytes,
                         errorMessage = null,
                         bytesPerSecond = 0L,
+                        finalizing = false,
                     ),
                 )
             }
             downloadRunner.cancelActive(url)
-            WorkManager.getInstance(application).cancelUniqueWork(workName(url))
+            workScheduler.cancel(url)
+            activeRegistry.markInactive(url)
         }.onFailure {
             stateBus.clearPauseRequested(url)
             logger.log(TAG, "pause failed for $url", it)
@@ -236,7 +253,7 @@ class MinnalDownloadManager @Inject constructor(
      */
     fun deleteEntry(url: String, alsoDeleteFile: Boolean) {
         downloadRunner.cancelActive(url)
-        WorkManager.getInstance(application).cancelUniqueWork(workName(url))
+        workScheduler.cancel(url)
         runCatching { storage.deleteStaging(url) }
         if (alsoDeleteFile) {
             repository.findDownloadForUrl(url).subscribe(
@@ -308,10 +325,14 @@ class MinnalDownloadManager @Inject constructor(
         }
         val arr = JSONArray()
         for (json in merged.values) arr.put(json)
-        arr.toString()
-    }.getOrElse {
-        logger.log(TAG, "getDownloadsJson failed", it)
-        "[]"
+        arr.toString().also { json ->
+            if (arr.length() > 0) {
+                lastGoodDownloadsJson = json
+            }
+        }
+    }.getOrElse { error ->
+        logger.log(TAG, "getDownloadsJson failed", error)
+        lastGoodDownloadsJson ?: "[]"
     }
 
     private fun DownloadEntry.toJson(): JSONObject = JSONObject().apply {
@@ -336,6 +357,7 @@ class MinnalDownloadManager @Inject constructor(
         target.put("totalBytes", totalBytes)
         target.put("bytesDownloaded", bytesDownloaded)
         target.put("bytesPerSecond", bytesPerSecond)
+        target.put("finalizing", finalizing)
         target.put("updatedAt", updatedAt)
         if (mimeType != null) target.put("mimeType", mimeType)
         if (localPath != null) target.put("localPath", localPath)
@@ -344,7 +366,40 @@ class MinnalDownloadManager @Inject constructor(
 
     private fun DownloadState.applyEphemeralOnto(target: JSONObject) {
         target.put("bytesPerSecond", bytesPerSecond)
+        target.put("finalizing", finalizing)
         target.put("updatedAt", updatedAt)
+    }
+
+    private fun shouldAutoResumeInterrupted(entry: DownloadEntry): Boolean {
+        val staged = storage.stagedBytesDownloaded(entry.url, entry.title)
+        if (staged <= 0L) return false
+        val total = entry.totalBytes
+        if (total > 0L && staged >= total * 95 / 100) return true
+        val message = entry.errorMessage.orEmpty()
+        return message.contains("saved", ignoreCase = true) ||
+            message.contains("incomplete", ignoreCase = true) ||
+            message.contains("interrupted", ignoreCase = true) ||
+            message.contains("Part ", ignoreCase = true) ||
+            message.contains("Almost done", ignoreCase = true)
+    }
+
+    private fun resurrectForegroundServiceIfNeeded() {
+        if (!activeRegistry.hasActive()) {
+            return
+        }
+        // In-process runner already owns the transfer and posts per-URL notifications.
+        // Resurrecting the FGS here would spawn a second notification with a stale id.
+        if (activeRegistry.activeUrls().any { downloadRunner.isActive(it) }) {
+            return
+        }
+        val intent = Intent(application, DownloadForegroundService::class.java).apply {
+            action = DownloadForegroundService.ACTION_RESURRECT
+        }
+        runCatching {
+            ContextCompat.startForegroundService(application, intent)
+        }.onFailure {
+            logger.log(TAG, "Failed to resurrect download foreground service", it)
+        }
     }
 
     private fun isTerminalPersistedStatus(status: String): Boolean =
@@ -352,8 +407,6 @@ class MinnalDownloadManager @Inject constructor(
             status == DownloadStatus.FAILED.name ||
             status == DownloadStatus.CANCELLED.name ||
             status == DownloadStatus.PAUSED.name
-
-    private fun workName(url: String): String = "minnal-download-" + url.hashCode().toString()
 
     companion object {
         private const val TAG = "MinnalDownloadManager"

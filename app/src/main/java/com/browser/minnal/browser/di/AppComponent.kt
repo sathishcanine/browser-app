@@ -9,6 +9,7 @@ import com.browser.minnal.browser.search.SearchBoxModel
 import com.browser.minnal.database.downloads.DownloadsRepository
 import com.browser.minnal.device.BuildInfo
 import com.browser.minnal.dialog.LightningDialogBuilder
+import com.browser.minnal.download.manager.ActiveDownloadRegistry
 import com.browser.minnal.download.manager.DownloadEngine
 import com.browser.minnal.download.manager.DownloadNotifier
 import com.browser.minnal.download.manager.DownloadRunner
@@ -100,6 +101,8 @@ interface AppComponent {
     fun downloadNotifier(): DownloadNotifier
 
     fun downloadStateBus(): DownloadStateBus
+
+    fun activeDownloadRegistry(): ActiveDownloadRegistry
 
     fun downloadsRepository(): DownloadsRepository
 

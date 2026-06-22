@@ -1,5 +1,6 @@
 package com.browser.minnal.browser
 
+import com.browser.minnal.BuildConfig
 import com.browser.minnal.adblock.allowlist.AllowListModel
 import com.browser.minnal.browser.data.CookieAdministrator
 import com.browser.minnal.browser.di.Browser2Scope
@@ -123,6 +124,8 @@ class BrowserPresenter @Inject constructor(
     private val downloadAutoNavigatedUrls = ConcurrentHashMap.newKeySet<String>()
 
     private var isBrowserInForeground = false
+
+    private var lastHomeBackPressTimeMs = 0L
 
     private var view: BrowserContract.View? = null
     private var viewState: BrowserViewState = BrowserViewState(
@@ -840,8 +843,21 @@ class BrowserPresenter @Inject constructor(
                     TabModel.Type.POP_UP,
                 ) -> onTabClose(tabListState.indexOfCurrentTab())
 
+                currentTab?.url?.isStartPageUrl() == true -> handleHomePageBackPress()
+
                 else -> navigator.backgroundBrowser()
             }
+        }
+    }
+
+    private fun handleHomePageBackPress() {
+        val now = System.currentTimeMillis()
+        if (now - lastHomeBackPressTimeMs <= HOME_BACK_EXIT_INTERVAL_MS) {
+            lastHomeBackPressTimeMs = 0L
+            navigator.closeBrowser()
+        } else {
+            lastHomeBackPressTimeMs = now
+            navigator.promptPressBackAgainToExit()
         }
     }
 
@@ -911,7 +927,7 @@ class BrowserPresenter @Inject constructor(
         !url.isBookmarkUrl() && !url.isDownloadsUrl()
 
     private fun computeShowDownloadsNativeAdStrip(url: String): Boolean =
-        url.isDownloadsUrl()
+        BuildConfig.ENABLE_DOWNLOADS_NATIVE_AD && url.isDownloadsUrl()
 
     /**
      * Call when the user clicks on the home button.
@@ -1681,5 +1697,9 @@ class BrowserPresenter @Inject constructor(
     private fun BrowserContract.View?.updateTabs(tabs: List<TabViewState>) {
         tabListState = tabs
         this?.renderTabs(tabListState)
+    }
+
+    private companion object {
+        private const val HOME_BACK_EXIT_INTERVAL_MS = 2_000L
     }
 }

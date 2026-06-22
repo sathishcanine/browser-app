@@ -1,10 +1,9 @@
 package com.browser.minnal.browser.tab
 
+import com.browser.minnal.browser.BrowserActivity
 import com.browser.minnal.download.manager.DownloadsBridge
 import com.browser.minnal.download.manager.MinnalDownloadManager
 import com.browser.minnal.html.homepage.HomePageBridge
-import com.browser.minnal.news.NewsBridge
-import com.browser.minnal.news.NewsRepository
 import com.browser.minnal.browser.di.DiskScheduler
 import com.browser.minnal.browser.di.MainScheduler
 import com.browser.minnal.browser.download.PendingDownload
@@ -63,7 +62,6 @@ class TabAdapter @AssistedInject constructor(
     private val previewModel: PreviewModel,
     private val activity: Activity,
     private val minnalDownloadManager: MinnalDownloadManager,
-    private val newsRepository: NewsRepository,
     private val popupTabGate: PopupTabGate,
     private val logger: Logger,
     @DiskScheduler private val diskScheduler: Scheduler,
@@ -112,16 +110,17 @@ class TabAdapter @AssistedInject constructor(
             // gate (only honors calls from the in-app downloads page), so registering it
             // globally is safe and lets the page survive across navigations within the same tab.
             addJavascriptInterface(
-                DownloadsBridge(this, minnalDownloadManager) {
-                    ratingPromptRequestSubject.onNext(Unit)
-                },
+                DownloadsBridge(
+                    webView = this,
+                    manager = minnalDownloadManager,
+                    onRequestRatingPrompt = {
+                        ratingPromptRequestSubject.onNext(Unit)
+                    },
+                    bottomOverlayInsetPx = {
+                        (activity as? BrowserActivity)?.webViewBottomOverlayInsetPx() ?: 0
+                    },
+                ),
                 DownloadsBridge.NAME
-            )
-            // Bridge to the news / discovery feed shown on the home / bookmarks page. Same
-            // URL-gating pattern as the downloads bridge.
-            addJavascriptInterface(
-                NewsBridge(this, newsRepository, userPreferences),
-                NewsBridge.NAME
             )
             addJavascriptInterface(
                 HomePageBridge(this) { addShortcutSubject.onNext(Unit) },

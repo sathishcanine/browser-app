@@ -8,6 +8,7 @@ import com.browser.minnal.browser.download.DownloadPermissionsHelper
 import com.browser.minnal.browser.download.PendingDownload
 import com.browser.minnal.extensions.copyToClipboard
 import com.browser.minnal.extensions.snackbar
+import com.browser.minnal.download.manager.ActiveDownloadRegistry
 import com.browser.minnal.log.Logger
 import com.browser.minnal.settings.activity.SettingsActivity
 import com.browser.minnal.utils.IntentUtils
@@ -28,6 +29,7 @@ class BrowserNavigator @Inject constructor(
     private val logger: Logger,
     private val downloadPermissionsHelper: DownloadPermissionsHelper,
     private val exitCleanup: ExitCleanup,
+    private val activeDownloadRegistry: ActiveDownloadRegistry,
     @IncognitoMode private val incognitoMode: Boolean,
     private val activityManager: ActivityManager,
 ) : BrowserContract.Navigator {
@@ -51,6 +53,8 @@ class BrowserNavigator @Inject constructor(
             activityManager.appTasks
                 .first { it.taskInfo.topActivity?.className == IncognitoBrowserActivity::class.java.name }
                 .finishAndRemoveTask()
+        } else if (activeDownloadRegistry.hasActive()) {
+            activity.moveTaskToBack(true)
         } else {
             activity.finish()
         }
@@ -81,6 +85,10 @@ class BrowserNavigator @Inject constructor(
         } else {
             activity.moveTaskToBack(true)
         }
+    }
+
+    override fun promptPressBackAgainToExit() {
+        activity.snackbar(R.string.message_press_back_again_to_exit)
     }
 
     override fun launchIncognito(url: String?) {
