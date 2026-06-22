@@ -304,6 +304,11 @@ interface BrowserContract {
         fun download(pendingDownload: PendingDownload)
 
         /**
+         * Request notification permission when needed so download progress can appear in the shade.
+         */
+        fun ensureDownloadNotificationsEnabled()
+
+        /**
          * Move the browser to the background without terminating the session.
          */
         fun backgroundBrowser()

@@ -4,6 +4,7 @@ import com.browser.minnal.R
 import com.browser.minnal.ads.RewardedDownloadAdHelper
 import com.browser.minnal.dialog.BrowserDialog.setDialogSize
 import com.browser.minnal.download.DownloadHandler
+import com.browser.minnal.download.manager.DownloadNotificationPermission
 import com.browser.minnal.extensions.snackbar
 import com.browser.minnal.log.Logger
 import com.browser.minnal.preference.UserPreferences
@@ -32,6 +33,20 @@ class DownloadPermissionsHelper @Inject constructor(
     private val rewardedDownloadAdHelper: RewardedDownloadAdHelper,
     private val logger: Logger
 ) {
+
+    /**
+     * Prompt for notification permission when opening Downloads so progress can appear in the shade.
+     */
+    fun ensureDownloadNotificationsEnabled(activity: FragmentActivity) {
+        if (DownloadNotificationPermission.canShowDownloadNotifications(activity)) {
+            return
+        }
+        DownloadNotificationPermission.requestRuntimePermissionIfNeeded(activity) { granted ->
+            if (!granted || !DownloadNotificationPermission.areEnabled(activity)) {
+                activity.snackbar(R.string.download_notifications_disabled)
+            }
+        }
+    }
 
     /**
      * Download a file with the provided [url].
@@ -97,6 +112,9 @@ class DownloadPermissionsHelper @Inject constructor(
                         !grantedList.contains(Manifest.permission.POST_NOTIFICATIONS)
                     ) {
                         logger.log(TAG, "POST_NOTIFICATIONS denied; download proceeds without shade UI")
+                        activity.snackbar(R.string.download_notifications_disabled)
+                    } else if (!DownloadNotificationPermission.areEnabled(activity)) {
+                        activity.snackbar(R.string.download_notifications_disabled)
                     }
                     onPermissionsResolved()
                 }

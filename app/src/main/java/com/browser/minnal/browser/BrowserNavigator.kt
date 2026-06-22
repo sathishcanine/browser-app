@@ -76,6 +76,10 @@ class BrowserNavigator @Inject constructor(
         )
     }
 
+    override fun ensureDownloadNotificationsEnabled() {
+        downloadPermissionsHelper.ensureDownloadNotificationsEnabled(activity)
+    }
+
     override fun backgroundBrowser() {
         if (incognitoMode) {
             exitCleanup.cleanUp()

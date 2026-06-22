@@ -563,6 +563,7 @@ class BrowserPresenter @Inject constructor(
             )
 
             MenuSelection.DOWNLOADS -> {
+                navigator.ensureDownloadNotificationsEnabled()
                 if (currentTab?.url?.isDownloadsUrl() != true) {
                     tabIdToRestoreAfterDownloads = currentTab?.id
                 }
