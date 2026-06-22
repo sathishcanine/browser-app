@@ -740,9 +740,14 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
     internal fun webViewBottomOverlayInsetPx(): Int = computeWebViewBottomOverlayInsetPx()
 
     private fun computeWebViewBottomOverlayInsetPx(): Int {
-        val rootLocation = IntArray(2)
-        binding.root.getLocationInWindow(rootLocation)
-        val rootBottom = rootLocation[1] + binding.root.height
+        val contentFrame = binding.contentFrame
+        if (!contentFrame.isLaidOut || contentFrame.height <= 0) {
+            return 0
+        }
+
+        val contentLocation = IntArray(2)
+        contentFrame.getLocationInWindow(contentLocation)
+        val contentBottom = contentLocation[1] + contentFrame.height
 
         val chromeViews = buildList {
             addressBarContainer?.let { add(it) } ?: add(binding.toolbar)
@@ -756,6 +761,9 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
                 add(binding.downloadsNativeAdStrip.root)
             }
         }
+        if (chromeViews.isEmpty()) {
+            return 0
+        }
 
         val chromeTop = chromeViews.minOf { view ->
             val location = IntArray(2)
@@ -763,8 +771,18 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
             location[1]
         }
 
-        return (rootBottom - chromeTop)
-            .coerceAtLeast(resources.getDimensionPixelSize(R.dimen.toolbar_height_portrait))
+        // Bottom chrome is laid out below [contentFrame], not over it — the WebView viewport
+        // already ends above the toolbar/ad strip. Adding that height as HTML padding creates
+        // a huge empty scroll region (reported as "endless scroll" on the downloads page).
+        val overlapSlopPx = (4f * resources.displayMetrics.density).toInt()
+        if (chromeTop >= contentBottom - overlapSlopPx) {
+            return 0
+        }
+
+        val overlapPx = (contentBottom - chromeTop).coerceAtLeast(0)
+        val minToolbar = resources.getDimensionPixelSize(R.dimen.toolbar_height_portrait)
+        val maxInsetPx = (resources.displayMetrics.heightPixels * 0.4f).toInt()
+        return overlapPx.coerceIn(minToolbar, maxInsetPx)
     }
 
     private fun showCloseAllTabsDialog() {

@@ -113,13 +113,13 @@ class DownloadPageFactory @Inject constructor(
     --space-4: 16px;
     --space-5: 20px;
     --space-6: 24px;
-    --bottom-chrome-inset: 96px;
+    --bottom-chrome-inset: 0px;
     color-scheme: light dark;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; background: var(--surface); color: var(--on-surface);
     font-family: -apple-system, "Roboto", "Segoe UI", system-ui, sans-serif; }
-body { padding-bottom: calc(var(--bottom-chrome-inset) + 24px); -webkit-tap-highlight-color: transparent; }
+body { padding-bottom: 200px; -webkit-tap-highlight-color: transparent; }
 
 .app-bar { background: var(--surface);
     padding: var(--space-5) var(--space-4) var(--space-3);
@@ -892,16 +892,15 @@ body { padding-bottom: calc(var(--bottom-chrome-inset) + 24px); -webkit-tap-high
     // --- Toast --------------------------------------------------------------
     var toastTimer = null;
     function applyBottomChromeInset() {
-        var insetPx = 96;
+        var insetPx = 0;
         try {
             if (BRIDGE && typeof BRIDGE.bottomChromeInsetPx === "function") {
                 insetPx = Math.max(0, BRIDGE.bottomChromeInsetPx());
             }
         } catch (e) { /* bridge unavailable */ }
-        document.documentElement.style.setProperty(
-            "--bottom-chrome-inset",
-            Math.max(insetPx, 56) + "px"
-        );
+        // Only used for fixed toast/bulk bar — never pad the document body (causes dead scroll).
+        var capped = Math.min(Math.max(insetPx, 0), 480);
+        document.documentElement.style.setProperty("--bottom-chrome-inset", capped + "px");
     }
     function toast(msg) {
         if (!msg) return;

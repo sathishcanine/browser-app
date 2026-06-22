@@ -13,7 +13,7 @@ import javax.inject.Inject
 class DownloadCleanup @Inject constructor(
     private val application: Application
 ) : Cleanup.Action {
-    override val versionCode: Int = 105
+    override val versionCode: Int = 107
 
     override suspend fun execute() {
         withContext(Dispatchers.IO) {
