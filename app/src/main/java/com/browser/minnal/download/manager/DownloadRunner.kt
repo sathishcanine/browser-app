@@ -304,9 +304,9 @@ class DownloadRunner @Inject constructor(
                 entry.title,
                 result.mimeType ?: entry.mimeType,
             )
-        } catch (io: IOException) {
-            logger.log(TAG, "Commit failed for ${entry.url}", io)
-            return failTerminal(entry, io, staging)
+        } catch (t: Throwable) {
+            logger.log(TAG, "Commit failed for ${entry.url}", t)
+            return failTerminal(entry, t, staging)
         }
 
         val finalBytes = if (result.totalBytes > 0) result.totalBytes else staging.length()

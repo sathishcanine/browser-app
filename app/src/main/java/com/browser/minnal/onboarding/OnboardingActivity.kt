@@ -150,6 +150,9 @@ class OnboardingActivity : AppCompatActivity() {
     }
 
     private fun completeOnboarding() {
+        if (userPreferences.firstLaunchEpochMs == 0L) {
+            userPreferences.firstLaunchEpochMs = System.currentTimeMillis()
+        }
         userPreferences.onboardingCompleted = true
         launchBrowserAndFinish()
     }

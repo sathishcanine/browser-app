@@ -321,6 +321,8 @@ abstract class BrowserActivity : ThemableBrowserActivity() {
             .build()
             .inject(this)
 
+        OnboardingActivity.markLegacyOnboardingCompleteIfNeeded(userPreferences)
+
         if (!isIncognito()) {
             handlePushNotificationIntent(intent)
         }

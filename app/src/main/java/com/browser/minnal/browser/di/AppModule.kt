@@ -9,6 +9,7 @@ import com.browser.minnal.device.BuildType
 import com.browser.minnal.favicon.FaviconCleanup
 import com.browser.minnal.html.ListPageReader
 import com.browser.minnal.html.bookmark.BookmarkCleanup
+import com.browser.minnal.html.bookmark.DefaultBookmarksLayoutMigration
 import com.browser.minnal.html.bookmark.LegacyDefaultBookmarksMigration
 import com.browser.minnal.html.bookmark.BookmarkPageReader
 import com.browser.minnal.html.download.DownloadCleanup
@@ -223,6 +224,7 @@ class AppModule {
     fun providesCleanupList(
         faviconCleanup: FaviconCleanup,
         legacyDefaultBookmarksMigration: LegacyDefaultBookmarksMigration,
+        defaultBookmarksLayoutMigration: DefaultBookmarksLayoutMigration,
         bookmarkCleanup: BookmarkCleanup,
         downloadCleanup: DownloadCleanup,
         historyCleanup: HistoryCleanup,
@@ -231,6 +233,7 @@ class AppModule {
         listOf(
             faviconCleanup,
             legacyDefaultBookmarksMigration,
+            defaultBookmarksLayoutMigration,
             bookmarkCleanup,
             downloadCleanup,
             historyCleanup,

@@ -26,7 +26,7 @@ android {
     defaultConfig {
         minSdk = 26
         targetSdk = 36
-        versionName = "1.0.12"
+        versionName = "1.0.13"
         vectorDrawables.useSupportLibrary = true
         // AdMob app id (tilde form). Override in `release` with the id from AdMob → Apps → App settings.
         manifestPlaceholders["admobAppId"] = "ca-app-pub-3940256099942544~3347511713"
@@ -181,7 +181,7 @@ android {
             dimension = "capabilities"
             buildConfigField("boolean", "FULL_VERSION", "Boolean.parseBoolean(\"true\")")
             applicationId = "com.browser.minnal"
-            versionCode = 23
+            versionCode = 24
         }
 
         if (!isCi) {
@@ -189,7 +189,7 @@ android {
                 dimension = "capabilities"
                 buildConfigField("boolean", "FULL_VERSION", "Boolean.parseBoolean(\"true\")")
                 applicationId = "com.browser.minnal"
-                versionCode = 23
+                versionCode = 24
             }
         }
     }

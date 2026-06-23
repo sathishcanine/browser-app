@@ -1,6 +1,7 @@
 package com.browser.minnal.download.manager
 
 import android.app.Application
+import android.content.ContentResolver
 import android.content.ContentValues
 import android.net.Uri
 import android.os.Build
@@ -10,6 +11,7 @@ import androidx.annotation.RequiresApi
 import com.browser.minnal.preference.UserPreferences
 import java.io.File
 import java.io.FileInputStream
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -156,44 +158,79 @@ class DownloadStorage @Inject constructor(
     ): String {
         val resolver = application.contentResolver
         val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
-        val uniqueName = uniqueFileName(fileName) { candidate ->
-            // Best-effort uniqueness against the same RELATIVE_PATH; we don't have a robust way
-            // to query MediaStore for "does this name exist" without permission cost, so just
-            // probe with a quick query.
-            mediaStoreNameExists(candidate)
+        val relativePath = downloadsRelativePath()
+        val uniqueName = uniqueFileName(mediaStoreDisplayName(fileName)) { candidate ->
+            mediaStoreNameExists(candidate, relativePath)
         }
-        val values = ContentValues().apply {
-            put(MediaStore.Downloads.DISPLAY_NAME, uniqueName)
-            if (!mimeType.isNullOrBlank()) put(MediaStore.Downloads.MIME_TYPE, mimeType)
-            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                put(MediaStore.Downloads.IS_PENDING, 1)
-            }
-        }
-        val itemUri = resolver.insert(collection, values)
-            ?: error("MediaStore.insert returned null for $uniqueName")
+        val itemUri = insertMediaStoreItem(
+            resolver = resolver,
+            collection = collection,
+            displayName = uniqueName,
+            mimeType = mimeType,
+            relativePath = relativePath,
+        ) ?: insertMediaStoreItem(
+            resolver = resolver,
+            collection = collection,
+            displayName = uniqueFileName(mediaStoreDisplayName(fileName, aggressive = true)) { candidate ->
+                mediaStoreNameExists(candidate, relativePath)
+            },
+            mimeType = mimeType,
+            relativePath = relativePath,
+        )
 
-        try {
-            resolver.openOutputStream(itemUri, "w")?.use { rawOut ->
-                rawOut.buffered(JOIN_BUFFER_BYTES).use { out ->
-                    FileInputStream(stagingFile).use { input -> input.copyTo(out) }
-                }
-            } ?: error("MediaStore.openOutputStream returned null for $itemUri")
+        if (itemUri != null) {
+            try {
+                resolver.openOutputStream(itemUri, "w")?.use { rawOut ->
+                    rawOut.buffered(JOIN_BUFFER_BYTES).use { out ->
+                        FileInputStream(stagingFile).use { input -> input.copyTo(out) }
+                    }
+                } ?: throw IOException("MediaStore.openOutputStream returned null for $itemUri")
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val publishedValues = ContentValues().apply {
                     put(MediaStore.Downloads.IS_PENDING, 0)
                 }
                 resolver.update(itemUri, publishedValues, null, null)
+                return itemUri.toString()
+            } catch (t: Throwable) {
+                runCatching { resolver.delete(itemUri, null, null) }
+                throw if (t is IOException) t else IOException("Failed to publish download via MediaStore", t)
+            } finally {
+                cleanupStaging(stagingFile)
             }
-        } catch (t: Throwable) {
-            runCatching { resolver.delete(itemUri, null, null) }
-            throw t
-        } finally {
-            stagingFile.delete()
-            stagingFile.parentFile?.takeIf { it.list().isNullOrEmpty() }?.delete()
         }
-        return itemUri.toString()
+
+        // Some OEM builds reject MediaStore.insert (null) even on API 29+; keep the file in an
+        // app-accessible Downloads folder rather than failing the whole transfer.
+        return commitViaAppExternalDownloads(stagingFile, uniqueName)
+    }
+
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun insertMediaStoreItem(
+        resolver: ContentResolver,
+        collection: Uri,
+        displayName: String,
+        mimeType: String?,
+        relativePath: String,
+    ): Uri? {
+        val values = ContentValues().apply {
+            put(MediaStore.Downloads.DISPLAY_NAME, displayName)
+            if (!mimeType.isNullOrBlank()) put(MediaStore.Downloads.MIME_TYPE, mimeType)
+            put(MediaStore.Downloads.RELATIVE_PATH, relativePath)
+            put(MediaStore.Downloads.IS_PENDING, 1)
+        }
+        return resolver.insert(collection, values)
+    }
+
+    private fun commitViaAppExternalDownloads(stagingFile: File, fileName: String): String {
+        val targetDir = application.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+            ?: File(application.filesDir, "downloads")
+        if (!targetDir.exists()) targetDir.mkdirs()
+        val target = File(targetDir, uniqueFileName(fileName) { candidate ->
+            File(targetDir, candidate).exists()
+        })
+        copyStagingToFile(stagingFile, target)
+        cleanupStaging(stagingFile)
+        return target.absolutePath
     }
 
     private fun commitViaLegacyFile(stagingFile: File, fileName: String): String {
@@ -202,6 +239,12 @@ class DownloadStorage @Inject constructor(
         val target = File(targetDir, uniqueFileName(fileName) { candidate ->
             File(targetDir, candidate).exists()
         })
+        copyStagingToFile(stagingFile, target)
+        cleanupStaging(stagingFile)
+        return target.absolutePath
+    }
+
+    private fun copyStagingToFile(stagingFile: File, target: File) {
         val moved = stagingFile.renameTo(target)
         if (!moved) {
             stagingFile.inputStream().use { input ->
@@ -209,8 +252,32 @@ class DownloadStorage @Inject constructor(
             }
             stagingFile.delete()
         }
+    }
+
+    private fun cleanupStaging(stagingFile: File) {
+        stagingFile.delete()
         stagingFile.parentFile?.takeIf { it.list().isNullOrEmpty() }?.delete()
-        return target.absolutePath
+    }
+
+    /** RELATIVE_PATH must end with '/' per MediaStore contract; some OEMs return null from insert without it. */
+    private fun downloadsRelativePath(): String = "${Environment.DIRECTORY_DOWNLOADS}/"
+
+    private fun mediaStoreDisplayName(fileName: String, aggressive: Boolean = false): String {
+        val base = safeFileName(fileName)
+        if (!aggressive) {
+            return base
+                .replace(INVALID_MEDIA_STORE_CHARS, "_")
+                .take(MAX_DISPLAY_NAME_LENGTH)
+                .ifBlank { "download" }
+        }
+        val dot = base.lastIndexOf('.')
+        val namePart = if (dot > 0) base.substring(0, dot) else base
+        val extPart = if (dot > 0) base.substring(dot) else ""
+        val cleanName = namePart.replace(Regex("""[^\w.\- ]"""), "_").trim()
+        val cleanExt = extPart.replace(Regex("""[^\w.]"""), "")
+        return (cleanName + cleanExt)
+            .take(MAX_DISPLAY_NAME_LENGTH)
+            .ifBlank { "download" }
     }
 
     private fun userDownloadDir(): File {
@@ -220,13 +287,13 @@ class DownloadStorage @Inject constructor(
     }
 
     @Suppress("NewApi")
-    private fun mediaStoreNameExists(name: String): Boolean {
+    private fun mediaStoreNameExists(name: String, relativePath: String = downloadsRelativePath()): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
         val resolver = application.contentResolver
         val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
         val projection = arrayOf(MediaStore.Downloads._ID)
         val selection = "${MediaStore.Downloads.DISPLAY_NAME} = ? AND ${MediaStore.Downloads.RELATIVE_PATH} LIKE ?"
-        val args = arrayOf(name, "${Environment.DIRECTORY_DOWNLOADS}%")
+        val args = arrayOf(name, "$relativePath%")
         return runCatching {
             resolver.query(collection, projection, selection, args, null)?.use { it.count > 0 }
         }.getOrNull() == true
@@ -263,5 +330,7 @@ class DownloadStorage @Inject constructor(
         private const val PART_FILE_PREFIX = "part-"
         private const val PART_PROGRESS_BYTES = 8L
         private const val JOIN_BUFFER_BYTES = 256 * 1024
+        private const val MAX_DISPLAY_NAME_LENGTH = 255
+        private val INVALID_MEDIA_STORE_CHARS = Regex("""[\\/:*?"<>|\u0000-\u001f]""")
     }
 }

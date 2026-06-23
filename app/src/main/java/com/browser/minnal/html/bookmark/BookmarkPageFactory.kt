@@ -58,6 +58,9 @@ class BookmarkPageFactory @Inject constructor(
     private val tamilshowzTsTileFile by lazy {
         File(FaviconModel.faviconCacheFolder(application), TAMILSHOWZ_TS_TILE_FILE)
     }
+    private val tamilplayTileFile by lazy {
+        File(FaviconModel.faviconCacheFolder(application), TAMILPLAY_TILE_FILE)
+    }
 
     private fun Int.toColor(): String {
         val string = Integer.toHexString(this)
@@ -212,6 +215,15 @@ class BookmarkPageFactory @Inject constructor(
                 }
                 tamilshowzTsTileFile
             }
+            isTamilplayHomeBookmark(entry.url) -> {
+                if (!tamilplayTileFile.exists()) {
+                    cacheIcon(
+                        faviconModel.createDefaultBitmapForLabel(TAMILPLAY_TILE_LABEL),
+                        tamilplayTileFile
+                    )
+                }
+                tamilplayTileFile
+            }
             isDailyThanthiHomeBookmark(entry.url) -> DAILY_THANTHI_BOOKMARK_ICON_URL
             isDinamalarHomeBookmark(entry.url) -> DINAMALAR_BOOKMARK_ICON_URL
             isBehindwoodsHomeBookmark(entry.url) -> BEHINDWOODS_BOOKMARK_ICON_URL
@@ -246,6 +258,15 @@ class BookmarkPageFactory @Inject constructor(
             null
         } ?: return false
         return host == "www.tamilshowz.net" || host == "tamilshowz.net"
+    }
+
+    private fun isTamilplayHomeBookmark(url: String): Boolean {
+        val host = try {
+            url.toUri().host?.lowercase()
+        } catch (_: Exception) {
+            null
+        } ?: return false
+        return host == "www.tamilkollymovies.xyz" || host == "tamilkollymovies.xyz"
     }
 
     private fun isDailyThanthiHomeBookmark(url: String): Boolean {
@@ -316,6 +337,8 @@ class BookmarkPageFactory @Inject constructor(
 
         private const val TAMILSHOWZ_TS_TILE_FILE = "bookmark_tile_tamilshowz_ts.png"
         private const val TAMILSHOWZ_TILE_LABEL = "TS"
+        private const val TAMILPLAY_TILE_FILE = "bookmark_tile_tamilplay_tp.png"
+        private const val TAMILPLAY_TILE_LABEL = "TP"
 
         private const val DAILY_THANTHI_BOOKMARK_ICON_URL = "https://www.dailythanthi.com/favicon.ico"
 
